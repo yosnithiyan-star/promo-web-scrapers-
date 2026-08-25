@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# scraped output — dated per run, not tracked in git
+raw/

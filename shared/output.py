@@ -16,14 +16,18 @@ PROMO_FIELDNAMES = [
 
 def save_json(promos, path):
     """Save promos as JSON."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    out_dir = os.path.dirname(path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(promos, f, ensure_ascii=False, indent=2)
 
 
 def save_csv(promos, path):
     """Save promos as CSV."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    out_dir = os.path.dirname(path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=PROMO_FIELDNAMES)
         writer.writeheader()

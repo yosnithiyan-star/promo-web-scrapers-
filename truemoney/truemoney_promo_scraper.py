@@ -198,7 +198,12 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def default_output_path(fmt: str, details: bool) -> str:
-    """raw/<today>/promos[_with_details].<fmt>, next to this script, created on demand."""
+    """Generate output path for backward compatibility with TrueMoney script.
+
+    Saves to raw/<today>/... relative to truemoney folder, not data/raw/.
+    (shared.output.default_output_path uses data/raw/{site_name}/... for multi-site).
+    This local version preserves the original folder structure.
+    """
     today = datetime.now(THAILAND_TZ).strftime("%Y-%m-%d")
     raw_dir = os.path.join(SCRIPT_DIR, "raw", today)
     os.makedirs(raw_dir, exist_ok=True)

@@ -28,9 +28,9 @@ Requirements:
 
 Usage:
     python truemoney_promo_scraper.py
-        writes raw/<today>/promos.json (auto-created, dated per run)
-    python truemoney_promo_scraper.py --details
-        writes raw/<today>/promos_with_details.json
+        writes raw/<today>/promos_with_details.json (auto-created, dated per run)
+    python truemoney_promo_scraper.py --no-details
+        writes raw/<today>/promos.json (skips per-promo detail requests)
     python truemoney_promo_scraper.py --format csv
     python truemoney_promo_scraper.py --out somewhere/else.json
         overrides the default raw/<today>/... path entirely
@@ -41,180 +41,37 @@ Notes:
       (some promos run only ~1 month). Re-run periodically if you need to
       track changes over time.
     - Please respect TrueMoney's Terms of Use / robots.txt if scraping at
-      scale or for commercial purposes. By default this script does a
-      single polite GET request per run; --details adds one more request
-      per promo (with a short delay between each) to pull richer per-promo
-      data, so use it more sparingly.
+      scale or for commercial purposes. Details are fetched by default (one
+      extra request per promo, with a short delay between each); pass
+      --no-details for a single polite GET request per run instead.
 """
 
 import argparse
-import csv
-import json
 import os
 import re
 import sys
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
+# Import from shared modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt
+from shared.date_parser import parse_date_range, DATE_RANGE_RE
+from shared.detail_fetcher import fetch_promo_detail, DETAIL_REQUEST_DELAY
+from shared.output import save_json, save_csv
+
 DEFAULT_URL = "https://www.truemoney.com/promotion"
-
-THAILAND_TZ = timezone(timedelta(hours=7))
-
-
-def format_thai_dt(dt: datetime) -> str:
-    """Format a datetime as 'YYYY-MM-DD HH:MM:SS' in GMT+7 (Thailand time)."""
-    local_dt = dt.astimezone(THAILAND_TZ)
-    return local_dt.strftime("%Y-%m-%d %H:%M:%S")
-
-
-def format_thai_dt_str(iso_str):
-    """Convert an ISO 8601 timestamp string to the same 'YYYY-MM-DD HH:MM:SS' GMT+7 format."""
-    if not iso_str:
-        return None
-    return format_thai_dt(datetime.fromisoformat(iso_str))
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
-}
-
-# Matches Thai Buddhist-calendar date ranges like:
-#   "1 ม.ค. 69 - 31 ธ.ค. 69"
-#   "24 ก.ค. 69 - 23 ส.ค. 69"
-# or open-ended phrases like:
-#   "วันนี้เป็นต้นไป"
-#   "1 ธ.ค. 69 - เป็นต้นไป"
-#   "5 ม.ค. 69 เป็นต้นไป"
-THAI_MONTHS = (
-    r"(?:ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|"
-    r"ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)"
-)
-DATE_TOKEN = rf"\d{{1,2}}\s*{THAI_MONTHS}\s*\d{{2,4}}"
-DATE_RANGE_RE = re.compile(
-    rf"((?:{DATE_TOKEN}|วันนี้)\s*(?:-\s*(?:{DATE_TOKEN}|เป็นต้นไป))?\s*(?:เป็นต้นไป)?"
-    rf"|{DATE_TOKEN}\s+เป็นต้นไป)"
-)
-DATE_TOKEN_RE = re.compile(rf"(\d{{1,2}})\s*({THAI_MONTHS})\s*(\d{{2,4}})")
-
-THAI_MONTH_NUM = {
-    "ม.ค.": 1, "ก.พ.": 2, "มี.ค.": 3, "เม.ย.": 4, "พ.ค.": 5, "มิ.ย.": 6,
-    "ก.ค.": 7, "ส.ค.": 8, "ก.ย.": 9, "ต.ค.": 10, "พ.ย.": 11, "ธ.ค.": 12,
-}
-
-
-def parse_thai_date_token(token: str, today: date):
-    """Convert a single Thai Buddhist-era date token (or 'วันนี้') to a Gregorian date."""
-    token = token.strip()
-    if token == "วันนี้":
-        return today
-    m = DATE_TOKEN_RE.match(token)
-    if not m:
-        return None
-    day = int(m.group(1))
-    month = THAI_MONTH_NUM[m.group(2)]
-    year_be = int(m.group(3))
-    if year_be < 100:
-        year_be += 2500
-    try:
-        return date(year_be - 543, month, day)
-    except ValueError:
-        return None
-
-
-def parse_date_range(date_range: str, today: date):
-    """Convert a raw date_range string into (date_start, date_end) ISO strings.
-
-    Open-ended ranges ("...เป็นต้นไป") resolve to a None end date.
-    """
-    if not date_range:
-        return None, None
-    open_ended = "เป็นต้นไป" in date_range
-    text = date_range.replace("เป็นต้นไป", "").strip(" -")
-    tokens = [t.strip() for t in text.split("-") if t.strip()]
-
-    start = parse_thai_date_token(tokens[0], today) if tokens else None
-    end = None
-    if not open_ended:
-        end = parse_thai_date_token(tokens[1], today) if len(tokens) > 1 else start
-
-    return (
-        start.isoformat() if start else None,
-        end.isoformat() if end else None,
-    )
-
-
-DETAIL_REQUEST_DELAY = 0.3  # seconds between per-promo detail requests, to stay polite
-
-# Some promo pages are just a client-side redirect stub, e.g. either:
-#   <script>let url="https://www.truemoney.com/inapp/google-one/"
-#   window.location.href=url</script>
-# or:
-#   <script>window.location.href="https://www.truemoney.com/inapp/foo/"</script>
-# with no real content of their own; the actual content lives at that target.
-JS_REDIRECT_VAR_RE = re.compile(r'url\s*=\s*"([^"]+)"\s*;?\s*window\.location\.href\s*=\s*url', re.IGNORECASE)
-JS_REDIRECT_DIRECT_RE = re.compile(r'window\.location\.href\s*=\s*"([^"]+)"', re.IGNORECASE)
-
-
-def find_js_redirect_target(html_text: str):
-    match = JS_REDIRECT_VAR_RE.search(html_text) or JS_REDIRECT_DIRECT_RE.search(html_text)
-    return match.group(1) if match else None
 
 
 def fetch_html(url: str) -> str:
-    resp = requests.get(url, headers=HEADERS, timeout=20)
+    resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=20)
     resp.raise_for_status()
     resp.encoding = resp.apparent_encoding
     return resp.text
-
-
-def fetch_promo_detail(url: str):
-    """Fetch a promo's own detail page for its publish/modified timestamps and terms text.
-
-    Returns (published_at, modified_at, terms), any of which may be None if the
-    request fails or the page doesn't have that information.
-    """
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=20)
-        resp.raise_for_status()
-    except requests.RequestException:
-        return None, None, None
-    resp.encoding = resp.apparent_encoding
-    soup = BeautifulSoup(resp.text, "lxml")
-
-    def meta_content(prop):
-        tag = soup.find("meta", attrs={"property": prop})
-        return tag["content"] if tag and tag.get("content") else None
-
-    published_at = format_thai_dt_str(meta_content("article:published_time"))
-    modified_at = format_thai_dt_str(meta_content("article:modified_time"))
-
-    content_div = soup.find("div", class_="post-content")
-    terms = content_div.get_text("\n", strip=True) if content_div else None
-
-    if not terms:
-        redirect_target = find_js_redirect_target(resp.text)
-        if redirect_target:
-            redirect_url = urljoin(url, redirect_target)
-            time.sleep(DETAIL_REQUEST_DELAY)
-            try:
-                redirect_resp = requests.get(redirect_url, headers=HEADERS, timeout=20)
-                redirect_resp.raise_for_status()
-                redirect_resp.encoding = redirect_resp.apparent_encoding
-                redirect_soup = BeautifulSoup(redirect_resp.text, "lxml")
-                redirect_content = redirect_soup.find("div", class_="post-content")
-                if redirect_content:
-                    terms = redirect_content.get_text("\n", strip=True)
-            except requests.RequestException:
-                pass
-
-    return published_at, modified_at, terms
 
 
 def split_title_and_date(raw_text: str):
@@ -337,26 +194,6 @@ def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False):
     return promos
 
 
-def save_json(promos, path):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(promos, f, ensure_ascii=False, indent=2)
-
-
-def save_csv(promos, path):
-    fieldnames = [
-        "post_id", "category", "category_slugs", "title", "date_range",
-        "date_start", "date_end", "link", "image", "scraped_at",
-        "published_at", "modified_at", "terms",
-    ]
-    with open(path, "w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        for p in promos:
-            row = dict(p)
-            row["category_slugs"] = ";".join(row["category_slugs"])
-            writer.writerow(row)
-
-
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -381,10 +218,11 @@ def main():
         help="Output format (inferred from --out extension if omitted; default json)",
     )
     parser.add_argument(
-        "--details", action="store_true",
+        "--details", action=argparse.BooleanOptionalAction, default=True,
         help=(
             "Also fetch each promo's own detail page for published_at/modified_at "
-            "timestamps and full terms text. Adds one extra HTTP request per promo."
+            "timestamps and full terms text. Adds one extra HTTP request per promo. "
+            "Enabled by default; pass --no-details to skip it."
         ),
     )
     args = parser.parse_args()
@@ -398,6 +236,7 @@ def main():
 
     out_path = args.out or default_output_path(fmt, args.details)
 
+    print(f"Proxy: {'Apify Proxy (rotating)' if PROXIES else 'none (direct connection)'}", file=sys.stderr)
     print(f"Fetching {args.url} ...", file=sys.stderr)
     t0 = time.time()
     promos = scrape_promotions(args.url, fetch_details=args.details)

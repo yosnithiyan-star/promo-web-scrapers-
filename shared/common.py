@@ -1,0 +1,39 @@
+"""Common configuration: headers, proxy, timezone."""
+
+import os
+from datetime import datetime, timedelta, timezone
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
+}
+
+THAILAND_TZ = timezone(timedelta(hours=7))
+
+
+def _build_proxies():
+    """Build proxy config from APIFY_PROXY_PASSWORD environment variable."""
+    password = os.environ.get("APIFY_PROXY_PASSWORD")
+    if not password:
+        return None
+    proxy_url = f"http://auto:{password}@proxy.apify.com:8000"
+    return {"http": proxy_url, "https": proxy_url}
+
+
+PROXIES = _build_proxies()
+
+
+def format_thai_dt(dt: datetime) -> str:
+    """Format a datetime as 'YYYY-MM-DD HH:MM:SS' in GMT+7 (Thailand time)."""
+    local_dt = dt.astimezone(THAILAND_TZ)
+    return local_dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def format_thai_dt_str(iso_str):
+    """Convert an ISO 8601 timestamp string to 'YYYY-MM-DD HH:MM:SS' GMT+7 format."""
+    if not iso_str:
+        return None
+    return format_thai_dt(datetime.fromisoformat(iso_str))

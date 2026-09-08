@@ -89,6 +89,17 @@ def iter_promo_sections(next_data: dict):
             yield section_key, section_val["title_th"], section_val["items"]
 
 
+def extract_text_from_html(html: str) -> str | None:
+    """Extract plain text from HTML, removing tags and cleaning whitespace."""
+    if not html:
+        return None
+    soup = BeautifulSoup(html, "lxml")
+    text = soup.get_text(separator=" ", strip=True)
+    # Clean up multiple spaces
+    text = " ".join(text.split())
+    return text if text else None
+
+
 def extract_image_url(item: dict) -> str | None:
     """Extract the first available image URL from the item's image arrays."""
     for field in ["rectangle_image", "thumb_image", "detail_image"]:
@@ -158,7 +169,8 @@ def build_promo(item: dict, section_key: str, category: str, base_url: str, fetc
         promo["published_at"] = format_thai_dt_str(created_at)
         promo["modified_at"] = format_thai_dt_str(updated_at)
         detail_th = item.get("detail_th")
-        promo["terms"] = detail_th if detail_th else None
+        # Extract clean text from HTML terms
+        promo["terms"] = extract_text_from_html(detail_th) if detail_th else None
 
     return promo
 

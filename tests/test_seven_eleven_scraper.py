@@ -141,7 +141,7 @@ class TestBuildPromo:
         }
         promo = build_promo(item, "test", "Test Category", "https://www.7eleven.co.th/promotion", True)
 
-        assert promo["terms"] == "<p>Full terms and conditions</p>"
+        assert promo["terms"] == "Full terms and conditions"
         assert promo["published_at"] is not None
         assert promo["modified_at"] is not None
         assert "2026-08-23" in promo["published_at"]

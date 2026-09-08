@@ -161,6 +161,12 @@ def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False) -> li
     promos = []
     seen_ids = set()
 
+    # Links to exclude (external redirects like AllOnline)
+    excluded_links = {
+        "https://www.allonline.7eleven.co.th/",
+        "https://www.allonline.7eleven.co.th",
+    }
+
     for section_key, category, items in iter_promo_sections(next_data):
         for item in items:
             if not isinstance(item, dict):
@@ -174,6 +180,16 @@ def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False) -> li
 
             item_url = item.get("item_url")
             if not item_url:
+                continue
+
+            # Skip external redirect links
+            resolved_link = urljoin(url, item_url)
+            if resolved_link in excluded_links:
+                continue
+
+            # Skip section-level redirect items (category/heroBanner items with no real category)
+            # These are the 6 icon redirects at the top of the page
+            if section_key in ("category", "heroBanner") and not category:
                 continue
 
             promo = build_promo(item, section_key, category, url, fetch_details)

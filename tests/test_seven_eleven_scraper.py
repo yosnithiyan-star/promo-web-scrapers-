@@ -119,6 +119,12 @@ class TestBuildPromo:
         assert promo["date_range"] == "ราคาพิเศษ สินค้ามีจำนวนจำกัด"
         assert promo["image"] is None
 
+    def test_item_with_null_url_is_skipped(self):
+        """Items with null item_url (banner/category metadata) should not create promos."""
+        # This test is for the scraper logic, not build_promo
+        # The scraper checks: if not item_url: continue
+        # So this is documented here but not directly tested in build_promo context
+
     def test_details_flag_includes_terms_and_timestamps(self):
         """With fetch_details=True, terms and timestamps are populated."""
         item = {

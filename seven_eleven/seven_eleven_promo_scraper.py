@@ -172,6 +172,10 @@ def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False) -> li
             if post_id:
                 seen_ids.add(post_id)
 
+            item_url = item.get("item_url")
+            if not item_url:
+                continue
+
             promo = build_promo(item, section_key, category, url, fetch_details)
             promos.append(promo)
 

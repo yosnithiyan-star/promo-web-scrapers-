@@ -28,9 +28,9 @@ Requirements:
 
 Usage:
     python truemoney_promo_scraper.py
-        writes raw/<today>/promos_with_details.json (auto-created, dated per run)
-    python truemoney_promo_scraper.py --no-details
-        writes raw/<today>/promos.json (skips per-promo detail requests)
+        writes raw/<today>/promos.json (auto-created, dated per run)
+    python truemoney_promo_scraper.py --details
+        writes raw/<today>/promos_with_details.json (also fetches per-promo details)
     python truemoney_promo_scraper.py --format csv
     python truemoney_promo_scraper.py --out somewhere/else.json
         overrides the default raw/<today>/... path entirely

@@ -20,8 +20,8 @@ python truemoney/truemoney_promo_scraper.py --format csv
 python truemoney/truemoney_promo_scraper.py --out somewhere/else.json
 ```
 
-`--details` also fetches each promo's own detail page for
-`published_at`/`modified_at`/`terms` (one extra request per promo).
+Details (`published_at`/`modified_at`/`terms`, one extra request per promo)
+are disabled by default for speed; pass `--details` to fetch them.
 
 A single run only ever produces one output file per day; re-running with
 the same flags on the same day overwrites that day's file (no

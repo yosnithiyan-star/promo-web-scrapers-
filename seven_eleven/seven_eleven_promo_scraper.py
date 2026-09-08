@@ -59,6 +59,7 @@ from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt, format_thai_dt_str
+from shared.date_parser import parse_date_range
 from shared.output import save_json, save_csv
 
 DEFAULT_URL = "https://www.7eleven.co.th/promotion"
@@ -123,6 +124,15 @@ def build_promo(item: dict, section_key: str, category: str, base_url: str, fetc
         date_end = end_dt_local.strftime("%Y-%m-%d")
     else:
         date_end = None
+
+    # If dates are missing from JSON, try to parse them from the date_range text (desc_th)
+    if not date_start and not date_end and date_range:
+        today = datetime.now(THAILAND_TZ).date()
+        parsed_start, parsed_end = parse_date_range(date_range, today)
+        if parsed_start:
+            date_start = parsed_start
+        if parsed_end:
+            date_end = parsed_end
 
     image = extract_image_url(item)
 

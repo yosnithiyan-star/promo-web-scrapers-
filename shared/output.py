@@ -14,20 +14,23 @@ PROMO_FIELDNAMES = [
 ]
 
 
-def save_json(promos, path):
-    """Save promos as JSON."""
+def _ensure_output_dir(path):
+    """Ensure parent directory of path exists."""
     out_dir = os.path.dirname(path)
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
+
+
+def save_json(promos, path):
+    """Save promos as JSON."""
+    _ensure_output_dir(path)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(promos, f, ensure_ascii=False, indent=2)
 
 
 def save_csv(promos, path):
     """Save promos as CSV."""
-    out_dir = os.path.dirname(path)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    _ensure_output_dir(path)
     with open(path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=PROMO_FIELDNAMES)
         writer.writeheader()
@@ -41,6 +44,6 @@ def default_output_path(site_name: str, fmt: str, details: bool) -> str:
     """Generate default output path: data/raw/{site_name}/{today}/promos[_with_details].{fmt}"""
     today = datetime.now(THAILAND_TZ).strftime("%Y-%m-%d")
     output_dir = os.path.join("data", "raw", site_name, today)
-    os.makedirs(output_dir, exist_ok=True)
+    _ensure_output_dir(output_dir)
     basename = "promos_with_details" if details else "promos"
     return os.path.join(output_dir, f"{basename}.{fmt}")

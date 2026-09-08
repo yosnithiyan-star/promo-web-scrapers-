@@ -12,14 +12,18 @@ from .common import HEADERS, PROXIES, format_thai_dt_str
 MAX_REDIRECT_HOPS = 5
 DETAIL_REQUEST_DELAY = 0.3
 
-JS_REDIRECT_VAR_RE = re.compile(r'url\s*=\s*"([^"]+)"\s*;?\s*window\.location\.href\s*=\s*url', re.IGNORECASE)
-JS_REDIRECT_DIRECT_RE = re.compile(r'window\.location\.href\s*=\s*"([^"]+)"', re.IGNORECASE)
+JS_REDIRECT_RE = re.compile(
+    r'(?:url\s*=\s*"([^"]+)"\s*;?\s*window\.location\.href\s*=\s*url|window\.location\.href\s*=\s*"([^"]+)")',
+    re.IGNORECASE
+)
 
 
 def find_js_redirect_target(html_text: str):
     """Find JavaScript redirect target in HTML if present."""
-    match = JS_REDIRECT_VAR_RE.search(html_text) or JS_REDIRECT_DIRECT_RE.search(html_text)
-    return match.group(1) if match else None
+    match = JS_REDIRECT_RE.search(html_text)
+    if not match:
+        return None
+    return match.group(1) or match.group(2)
 
 
 def fetch_promo_detail(url: str):

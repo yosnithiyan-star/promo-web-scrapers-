@@ -223,11 +223,11 @@ def main():
         help="Output format (inferred from --out extension if omitted; default json)",
     )
     parser.add_argument(
-        "--details", action=argparse.BooleanOptionalAction, default=True,
+        "--details", action=argparse.BooleanOptionalAction, default=False,
         help=(
             "Also fetch each promo's own detail page for published_at/modified_at "
             "timestamps and full terms text. Adds one extra HTTP request per promo. "
-            "Enabled by default; pass --no-details to skip it."
+            "Disabled by default; pass --details to enable it."
         ),
     )
     args = parser.parse_args()

@@ -13,17 +13,13 @@ HEADERS = {
 
 THAILAND_TZ = timezone(timedelta(hours=7))
 
-
-def _build_proxies():
-    """Build proxy config from APIFY_PROXY_PASSWORD environment variable."""
-    password = os.environ.get("APIFY_PROXY_PASSWORD")
-    if not password:
-        return None
-    proxy_url = f"http://auto:{password}@proxy.apify.com:8000"
-    return {"http": proxy_url, "https": proxy_url}
-
-
-PROXIES = _build_proxies()
+password = os.environ.get("APIFY_PROXY_PASSWORD")
+PROXIES = (
+    {"http": f"http://auto:{password}@proxy.apify.com:8000",
+     "https": f"http://auto:{password}@proxy.apify.com:8000"}
+    if password
+    else None
+)
 
 
 def format_thai_dt(dt: datetime) -> str:

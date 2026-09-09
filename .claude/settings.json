@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json.schema.org/draft-07/schema",
+  "outputStyle": "Concise",
+  "skillOverrides": {
+    "agent-session-resume": "on",
+    "recap": "on",
+    "code-review": "on",
+    "simplify": "on",
+    "security-review": "on",
+    "init": "on",
+    "dataviz": "off",
+    "artifact-design": "off",
+    "artifact-diagramming": "off",
+    "update-config": "off",
+    "keybindings-help": "off",
+    "fewer-permission-prompts": "off",
+    "loop": "off",
+    "claude-api": "off",
+    "workflow-authoring": "off",
+    "run": "off",
+    "claude-code-guide": "off"
+  },
+  "permissions": {
+    "deny": [
+      "Read(*.env)",
+      "Read(*.pem)",
+      "Read(*.p12)",
+      "Read(*secret*)",
+      "Read(*credential*)",
+      "Read(*password*)",
+      "Grep(*.env)",
+      "Grep(*secret*)",
+      "Grep(*credential*)",
+      "Bash(cat .env)",
+      "Bash(cat *.env)",
+      "Bash(env | grep *)"
+    ],
+    "allow": [
+      "Bash(python -c ' *)",
+      "Bash(python -m pytest *)"
+    ]
+  },
+  "sandbox": {
+    "credentials": {
+      "envVars": [
+        {
+          "name": "APIFY_PROXY_PASSWORD",
+          "mode": "deny"
+        }
+      ]
+    }
+  }
+}

@@ -60,10 +60,12 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt, format_thai_dt_str
 from shared.date_parser import parse_date_range
+from shared.detail_fetcher import clean_terms_text
 from shared.output import save_json, save_csv, SITE_CODES, make_site_id
 
 DEFAULT_URL = "https://www.7eleven.co.th/promotion"
-SITE_CODE = SITE_CODES["seven_eleven"]
+SITE_NAME = "seven_eleven"
+SITE_CODE = SITE_CODES[SITE_NAME]
 
 
 def fetch_html(url: str) -> str:
@@ -95,10 +97,7 @@ def extract_text_from_html(html: str) -> str | None:
     if not html:
         return None
     soup = BeautifulSoup(html, "lxml")
-    text = soup.get_text(separator=" ", strip=True)
-    # Clean up multiple spaces
-    text = " ".join(text.split())
-    return text if text else None
+    return clean_terms_text(soup.get_text(separator=" ", strip=True))
 
 
 def extract_image_url(item: dict) -> str | None:
@@ -148,7 +147,7 @@ def build_promo(item: dict, section_key: str, category: str, base_url: str, fetc
 
     promo = {
         "id": make_site_id(SITE_CODE, post_id, link),
-        "site": "seven_eleven",
+        "site": SITE_NAME,
         "post_id": post_id,
         "category": category if category else None,
         "category_slugs": [section_key],

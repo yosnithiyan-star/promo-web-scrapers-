@@ -65,7 +65,8 @@ from shared.detail_fetcher import fetch_promo_detail, DETAIL_REQUEST_DELAY
 from shared.output import save_json, save_csv, SITE_CODES, make_site_id
 
 DEFAULT_URL = "https://www.truemoney.com/promotion"
-SITE_CODE = SITE_CODES["truemoney"]
+SITE_NAME = "truemoney"
+SITE_CODE = SITE_CODES[SITE_NAME]
 
 
 def fetch_html(url: str) -> str:
@@ -161,7 +162,7 @@ def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False):
             date_start, date_end = parse_date_range(date_range, today)
             post_id, category_slugs = parse_article_identity(el.find_parent("article"))
 
-            dedup_key = post_id if post_id is not None else link
+            dedup_key = make_site_id(SITE_CODE, post_id, link)
             if dedup_key in seen_keys:
                 print(f"Skipping duplicate promo (post_id={post_id}): {link}", file=sys.stderr)
                 pending_image = None
@@ -170,7 +171,7 @@ def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False):
 
             promo = {
                 "id": make_site_id(SITE_CODE, post_id, link),
-                "site": "truemoney",
+                "site": SITE_NAME,
                 "post_id": post_id,
                 "category": current_category,
                 "category_slugs": category_slugs,

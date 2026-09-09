@@ -41,9 +41,9 @@ Notes:
       (some promos run only ~1 month). Re-run periodically if you need to
       track changes over time.
     - Please respect TrueMoney's Terms of Use / robots.txt if scraping at
-      scale or for commercial purposes. Details are fetched by default (one
-      extra request per promo, with a short delay between each); pass
-      --no-details for a single polite GET request per run instead.
+      scale or for commercial purposes. Details are disabled by default (a
+      single polite GET request per run); pass --details to fetch each promo's
+      own detail page (one extra request per promo, with a short delay).
 """
 
 import argparse

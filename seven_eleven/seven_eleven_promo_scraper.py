@@ -115,9 +115,7 @@ def build_promo(item: dict, section_key: str, category: str, base_url: str, fetc
     """Map a raw 7-Eleven item dict to the standard promo schema."""
     post_id = item.get("id")
     title = item.get("title_th", "")
-    date_range = item.get("desc_th", "")
-    # Strip whitespace from date_range
-    date_range = date_range.strip() if date_range else ""
+    date_range = (item.get("desc_th") or "").strip()
     item_url = item.get("item_url", "")
     link = urljoin(base_url, item_url) if item_url else ""
 
@@ -141,20 +139,9 @@ def build_promo(item: dict, section_key: str, category: str, base_url: str, fetc
     # If dates are missing from JSON, try to parse them from the date_range text (desc_th)
     if (not date_start or not date_end) and date_range:
         today = datetime.now(THAILAND_TZ).date()
-        # Normalize date_range format: if year is only at the end, add it to the first date too
-        # E.g., "24 ส.ค. - 23 ก.ย. 69" → "24 ส.ค. 69 - 23 ก.ย. 69"
-        if " - " in date_range and date_range.split(" - ")[0].count(" ") == 1:
-            parts = date_range.split(" - ")
-            year_match = re.search(r"(\d{2,4})\s*$", parts[1])
-            if year_match:
-                year = year_match.group(1)
-                date_range = f"{parts[0]} {year} - {parts[1]}"
-
         parsed_start, parsed_end = parse_date_range(date_range, today)
-        if parsed_start and not date_start:
-            date_start = parsed_start
-        if parsed_end and not date_end:
-            date_end = parsed_end
+        date_start = date_start or parsed_start
+        date_end = date_end or parsed_end
 
     image = extract_image_url(item)
 

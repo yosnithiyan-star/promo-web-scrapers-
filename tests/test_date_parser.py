@@ -113,6 +113,13 @@ class TestParseDateRange:
         assert start == "2026-09-07"
         assert end is None
 
+    def test_year_only_at_end_backfills_first_token(self):
+        """First date with no year borrows the year from the second date."""
+        today = date(2026, 9, 8)
+        start, end = parse_date_range("24 ส.ค. - 23 ก.ย. 69", today)
+        assert start == "2026-08-24"
+        assert end == "2026-09-23"
+
 
 class TestDateRangeRegex:
     """Test that date range regex correctly identifies ranges in text."""

@@ -13,6 +13,7 @@ DATE_RANGE_RE = re.compile(
     rf"|{DATE_TOKEN}\s+เป็นต้นไป)"
 )
 DATE_TOKEN_RE = re.compile(rf"(\d{{1,2}})\s*({THAI_MONTHS})\s*(\d{{2,4}})")
+PARTIAL_DATE_TOKEN_RE = re.compile(rf"^\d{{1,2}}\s*{THAI_MONTHS}$")
 
 THAI_MONTH_NUM = {
     "ม.ค.": 1, "ก.พ.": 2, "มี.ค.": 3, "เม.ย.": 4, "พ.ค.": 5, "มิ.ย.": 6,
@@ -42,13 +43,20 @@ def parse_thai_date_token(token: str, today: date):
 def parse_date_range(date_range: str, today: date):
     """Convert a raw date_range string into (date_start, date_end) ISO strings.
 
-    Open-ended ranges ("...เป็นต้นไป") resolve to a None end date.
+    Open-ended ranges ("...เป็นต้นไป") resolve to a None end date. If the first
+    token has no year of its own (e.g. "24 ส.ค. - 23 ก.ย. 69"), it borrows the
+    year from the second token.
     """
     if not date_range:
         return None, None
     open_ended = "เป็นต้นไป" in date_range
     text = date_range.replace("เป็นต้นไป", "").strip(" -")
     tokens = [t.strip() for t in text.split("-") if t.strip()]
+
+    if len(tokens) > 1 and PARTIAL_DATE_TOKEN_RE.match(tokens[0]):
+        year_match = re.search(r"(\d{2,4})\s*$", tokens[1])
+        if year_match:
+            tokens[0] = f"{tokens[0]} {year_match.group(1)}"
 
     start = parse_thai_date_token(tokens[0], today) if tokens else None
     end = None

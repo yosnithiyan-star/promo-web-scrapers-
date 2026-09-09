@@ -1,6 +1,7 @@
 """Output formatting and file saving utilities."""
 
 import csv
+import hashlib
 import json
 import os
 from datetime import datetime
@@ -8,10 +9,32 @@ from datetime import datetime
 from .common import THAILAND_TZ
 
 PROMO_FIELDNAMES = [
-    "post_id", "category", "category_slugs", "title", "date_range",
-    "date_start", "date_end", "link", "image", "scraped_at",
+    "id", "site", "post_id", "category", "category_slugs", "title",
+    "date_range", "date_start", "date_end", "link", "image", "scraped_at",
     "published_at", "modified_at", "terms",
 ]
+
+# Canonical site codes, locked once. Every scraper registers its prefix here
+# so namespaced ids (e.g. "tmn_236401") stay unique across sites.
+SITE_CODES = {
+    "truemoney": "tmn",
+    "seven_eleven": "7el",
+}
+
+
+def make_site_id(site_code: str, post_id, link: str = "") -> str | None:
+    """Build the namespaced, cross-site-unique id for a promo.
+
+    Namespaces the native post_id when present (e.g. "tmn_236401"). When the
+    site has no native id, falls back to namespacing a stable short hash of the
+    promo link so the id stays unique across sites.
+    """
+    if post_id is not None:
+        return f"{site_code}_{post_id}"
+    if link:
+        digest = hashlib.md5(link.encode("utf-8")).hexdigest()
+        return f"{site_code}_{digest[:6]}"
+    return None
 
 
 def _ensure_output_dir(path):

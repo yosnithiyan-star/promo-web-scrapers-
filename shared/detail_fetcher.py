@@ -18,6 +18,18 @@ JS_REDIRECT_RE = re.compile(
 )
 
 
+def clean_terms_text(text: str | None) -> str | None:
+    """Collapse all whitespace (newlines, runs of spaces) to single spaces.
+
+    Terms text is scraped with line breaks preserved; downstream consumers
+    want plain single-line text. Returns None for empty/whitespace-only input.
+    """
+    if not text:
+        return None
+    cleaned = " ".join(text.split())
+    return cleaned if cleaned else None
+
+
 def find_js_redirect_target(html_text: str):
     """Find JavaScript redirect target in HTML if present."""
     match = JS_REDIRECT_RE.search(html_text)
@@ -48,7 +60,7 @@ def fetch_promo_detail(url: str):
     modified_at = format_thai_dt_str(meta_content("article:modified_time"))
 
     content_div = soup.find("div", class_="post-content")
-    terms = content_div.get_text("\n", strip=True) if content_div else None
+    terms = clean_terms_text(content_div.get_text("\n", strip=True)) if content_div else None
 
     current_url, current_html = url, resp.text
     for _ in range(MAX_REDIRECT_HOPS):
@@ -69,6 +81,6 @@ def fetch_promo_detail(url: str):
         redirect_soup = BeautifulSoup(current_html, "lxml")
         redirect_content = redirect_soup.find("div", class_="post-content")
         if redirect_content:
-            terms = redirect_content.get_text("\n", strip=True)
+            terms = clean_terms_text(redirect_content.get_text("\n", strip=True))
 
     return published_at, modified_at, terms

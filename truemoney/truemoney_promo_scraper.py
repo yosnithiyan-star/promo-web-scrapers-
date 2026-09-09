@@ -62,9 +62,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt
 from shared.date_parser import parse_date_range, DATE_RANGE_RE
 from shared.detail_fetcher import fetch_promo_detail, DETAIL_REQUEST_DELAY
-from shared.output import save_json, save_csv
+from shared.output import save_json, save_csv, SITE_CODES, make_site_id
 
 DEFAULT_URL = "https://www.truemoney.com/promotion"
+SITE_CODE = SITE_CODES["truemoney"]
 
 
 def fetch_html(url: str) -> str:
@@ -168,6 +169,8 @@ def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False):
             seen_keys.add(dedup_key)
 
             promo = {
+                "id": make_site_id(SITE_CODE, post_id, link),
+                "site": "truemoney",
                 "post_id": post_id,
                 "category": current_category,
                 "category_slugs": category_slugs,

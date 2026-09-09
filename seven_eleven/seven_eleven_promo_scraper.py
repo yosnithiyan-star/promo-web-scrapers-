@@ -60,9 +60,10 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt, format_thai_dt_str
 from shared.date_parser import parse_date_range
-from shared.output import save_json, save_csv
+from shared.output import save_json, save_csv, SITE_CODES, make_site_id
 
 DEFAULT_URL = "https://www.7eleven.co.th/promotion"
+SITE_CODE = SITE_CODES["seven_eleven"]
 
 
 def fetch_html(url: str) -> str:
@@ -146,6 +147,8 @@ def build_promo(item: dict, section_key: str, category: str, base_url: str, fetc
     image = extract_image_url(item)
 
     promo = {
+        "id": make_site_id(SITE_CODE, post_id, link),
+        "site": "seven_eleven",
         "post_id": post_id,
         "category": category if category else None,
         "category_slugs": [section_key],

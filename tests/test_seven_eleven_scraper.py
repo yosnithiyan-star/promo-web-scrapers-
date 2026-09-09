@@ -85,6 +85,8 @@ class TestBuildPromo:
         }
         promo = build_promo(item, "trade", "สินค้าราคาพิเศษ", "https://www.7eleven.co.th/promotion", False)
 
+        assert promo["id"] == "7el_3711"
+        assert promo["site"] == "seven_eleven"
         assert promo["post_id"] == 3711
         assert promo["title"] == "อร่อยราคาพิเศษ"
         assert promo["date_range"] == "24 ส.ค. - 23 ก.ย. 69"

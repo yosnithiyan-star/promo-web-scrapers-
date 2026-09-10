@@ -19,6 +19,7 @@ PROMO_FIELDNAMES = [
 SITE_CODES = {
     "truemoney": "tmn",
     "seven_eleven": "7el",
+    "aeon": "aeon",
 }
 
 
@@ -59,7 +60,13 @@ def save_csv(promos, path):
         writer.writeheader()
         for p in promos:
             row = dict(p)
-            row["category_slugs"] = ";".join(row.get("category_slugs", []))
+            # Serialize list-valued columns (e.g. category_slugs, terms_items,
+            # terms) as semicolon-joined strings; CSV has no list type. For
+            # lists of {label, text} objects (like terms), join just the text.
+            for k, v in row.items():
+                if isinstance(v, list):
+                    parts = [x.get("text", x) if isinstance(x, dict) else x for x in v]
+                    row[k] = ";".join(str(x) for x in parts)
             writer.writerow(row)
 
 

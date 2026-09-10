@@ -53,6 +53,9 @@ misc).
   `"วันนี้"` (today) keyword. Year-backfill logic lives here (a missing year
   on the first token is borrowed from the second), NOT in the scrapers.
 - `detail_fetcher.py` — fetch detail pages, follow JS redirects, extract meta.
+- `link_identity.py` — `canonicalize_link` (strip tracking params/fragments,
+  lower-case host, sort query params, drop trailing slash) and the cross-run
+  `raw/seen.json` seen-store load/save used to flag re-numbered `post_id`s.
 - `output.py` — `PROMO_FIELDNAMES` (the shared schema), `SITE_CODES`,
   `make_site_id`, `save_json`, `save_csv`, `default_output_path`.
 
@@ -70,7 +73,8 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 - `site` holds the site code (e.g. `truemoney`, `seven_eleven`, `aeon`), the
   key into `shared.output.SITE_CODES`.
 - Dates are ISO `YYYY-MM-DD`. `scraped_at` is `YYYY-MM-DD HH:MM:SS` in GMT+7.
-- `terms` must be plain text — strip HTML before storing.
+- `terms` must be plain text — strip HTML before storing. (AEON uses a list of
+  `{label, text}` objects; TrueMoney/7-Eleven use a plain string.)
 - `--details` adds `published_at`/`modified_at`/`terms` and is off by default.
   For 7-Eleven these fields come from the embedded JSON (no extra request);
   for TrueMoney each adds a per-promo request (~40s for 35 promos); for AEON
@@ -84,8 +88,11 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 - **7-Eleven dates are already ISO** in the JSON blob — no Thai parsing there.
   TrueMoney needs `shared/date_parser` for Thai strings; AEON uses full-name
   Thai Buddhist-era strings via `parse_thai_date_range_full`.
-- **Dedup by `id`** (the namespaced id). Do not let a non-unique id silently
-  drop promos — log duplicates to stderr.
+- **Dedup by `id`** (the namespaced id) within a run; log duplicates to stderr
+  instead of silently dropping. Cross-run, identity is by the **canonicalized
+  `link`** (`shared/link_identity.py`): a persistent `raw/seen.json` store maps
+  each link to the identity last scraped under it, and a `post_id` that was
+  re-numbered (same link, new id) is **flagged on stderr, not dropped**.
 - Output `raw/` and `__pycache__/` are git-ignored; scraped data is not committed.
 
 ## Git
@@ -115,3 +122,5 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 - `test_seven_eleven_scraper.py`, `test_aeon_scraper.py`, and
   `test_truemoney_scraper.py` use fixtures / mocked data — no live network.
 - `test_shared_helpers.py` covers the shared `output`/`common` helpers.
+- `test_link_identity.py` covers link canonicalization, the `seen.json`
+  seen-store round-trip, and cross-run re-numbered-`post_id` flagging.

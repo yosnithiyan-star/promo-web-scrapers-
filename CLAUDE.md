@@ -42,8 +42,12 @@ misc).
   its dated `raw/` output into (declared explicitly, not derived by
   reflection). Each scraper's module just defines its subclass and a `main()`
   that delegates.
-- `common.py` — HEADERS, THAILAND_TZ (GMT+7), Apify proxy (enabled only if
-  `APIFY_PROXY_PASSWORD` is set), `format_thai_dt*` helpers.
+- `common.py` — HEADERS, THAILAND_TZ (GMT+7), `format_thai_dt*` helpers, and
+  the Apify proxy `PROXIES`. The proxy is enabled only when
+  `APIFY_PROXY_PASSWORD` is set (unset → direct connection). It connects as
+  `groups-BUYPROXIES94952,session-promo_scrapers`, pinning one stable IP from
+  the plan's included pool. The password is sent over plain HTTP — never
+  commit, log, or share it.
 - `date_parser.py` — Thai Buddhist-era date parsing. Handles ranges
   (`"24 ส.ค. - 23 ก.ย. 69"`), open-ended (`"เป็นต้นไป"`), and the
   `"วันนี้"` (today) keyword. Year-backfill logic lives here (a missing year

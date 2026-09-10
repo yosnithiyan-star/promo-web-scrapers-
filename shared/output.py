@@ -68,12 +68,3 @@ def save_csv(promos, path):
                     parts = [x.get("text", x) if isinstance(x, dict) else x for x in v]
                     row[k] = ";".join(str(x) for x in parts)
             writer.writerow(row)
-
-
-def default_output_path(site_name: str, fmt: str, details: bool) -> str:
-    """Generate default output path: data/raw/{site_name}/{today}/promos[_with_details].{fmt}"""
-    today = datetime.now(THAILAND_TZ).strftime("%Y-%m-%d")
-    output_dir = os.path.join("data", "raw", site_name, today)
-    _ensure_output_dir(output_dir)
-    basename = "promos_with_details" if details else "promos"
-    return os.path.join(output_dir, f"{basename}.{fmt}")

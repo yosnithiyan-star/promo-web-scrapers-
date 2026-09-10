@@ -118,6 +118,7 @@ class SevenElevenPromotionScraper(PromotionScraper):
 
     SITE_NAME = SITE_NAME
     DEFAULT_URL = DEFAULT_URL
+    OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
     def fetch_data(self, url: str) -> dict:
         return extract_next_data(fetch_html(url))

@@ -109,6 +109,7 @@ class TrueMoneyPromotionScraper(PromotionScraper):
 
     SITE_NAME = SITE_NAME
     DEFAULT_URL = DEFAULT_URL
+    OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
     def fetch_data(self, url: str):
         return BeautifulSoup(fetch_html(url), "lxml")

@@ -35,8 +35,11 @@ parser + 14 seven_eleven + 17 AEON + 11 TrueMoney + 9 shared_helpers + 1).
 
 - `base.py` — `PromotionScraper` ABC. Holds the orchestration every site shares
   (fetch → iterate → build → dedup by namespaced `id` → save) plus the CLI
-  (`main`) and `default_output_path`. A site subclasses it and implements only
-  `fetch_data`, `iter_raw_items`, `build_promo`.
+  (`main`) and `default_output_path`. A site subclasses it, declares
+  `SITE_NAME`/`DEFAULT_URL`/`OUTPUT_DIR`, and implements only `fetch_data`,
+  `iter_raw_items`, `build_promo`. `OUTPUT_DIR` is the folder the site writes
+  its dated `raw/` output into (declared explicitly, not derived by
+  reflection).
 - `common.py` — HEADERS, THAILAND_TZ (GMT+7), Apify proxy (enabled only if
   `APIFY_PROXY_PASSWORD` is set), `format_thai_dt*` helpers.
 - `date_parser.py` — Thai Buddhist-era date parsing. Handles ranges

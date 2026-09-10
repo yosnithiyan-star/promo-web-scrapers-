@@ -44,3 +44,47 @@ class TestCleanTermsText:
         assert clean_terms_text("") is None
         assert clean_terms_text("   ") is None
         assert clean_terms_text(None) is None
+
+
+class TestDefaultOutputPath:
+    """default_output_path must build from the declared OUTPUT_DIR, not from
+    where the subclass's source file lives."""
+
+    def _scraper(self, output_dir):
+        from shared.base import PromotionScraper
+
+        class _Stub(PromotionScraper):
+            SITE_NAME = "stub"
+            DEFAULT_URL = "https://example.com"
+            OUTPUT_DIR = output_dir
+
+            def fetch_data(self, url):
+                return None
+
+            def iter_raw_items(self, data):
+                return iter(())
+
+            def build_promo(self, item, today, fetch_details=False):
+                return None
+
+        return _Stub()
+
+    def test_path_uses_declared_output_dir(self, tmp_path):
+        out = str(tmp_path / "somewhere_else")
+        scraper = self._scraper(out)
+        path = scraper.default_output_path("json", details=False)
+        # The path is rooted at the declared OUTPUT_DIR, not the tests dir.
+        assert path.startswith(out)
+        assert os.path.basename(path) == "promos.json"
+
+    def test_details_suffix(self, tmp_path):
+        scraper = self._scraper(str(tmp_path))
+        path = scraper.default_output_path("csv", details=True)
+        assert os.path.basename(path) == "promos_with_details.csv"
+        assert path.endswith(".csv")
+
+    def test_creates_raw_today_dir(self, tmp_path):
+        scraper = self._scraper(str(tmp_path))
+        path = scraper.default_output_path("json", details=False)
+        assert os.path.isdir(os.path.dirname(path))
+        assert os.path.basename(os.path.dirname(path)).count("-") == 2  # YYYY-MM-DD

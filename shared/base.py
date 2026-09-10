@@ -12,7 +12,6 @@ gets scrape_promotions, default_output_path and the CLI for free.
 """
 
 import argparse
-import inspect
 import os
 import sys
 import time
@@ -27,13 +26,17 @@ from .output import save_json, save_csv
 class PromotionScraper(ABC):
     """Abstract base for promotion scrapers.
 
-    Subclasses set SITE_NAME (and DEFAULT_URL) and implement the three
-    abstract methods. Everything else — deduping, output paths, the CLI —
-    is provided here.
+    Subclasses set SITE_NAME, DEFAULT_URL and OUTPUT_DIR, and implement the
+    three abstract methods. Everything else — deduping, output paths, the
+    CLI — is provided here.
     """
 
     SITE_NAME: str
     DEFAULT_URL: str = ""
+    # The folder this site writes its dated raw/ output into. Declared
+    # explicitly by each subclass so output location is a contract, not
+    # derived from where the source file happens to live.
+    OUTPUT_DIR: str
 
     @abstractmethod
     def fetch_data(self, url: str) -> Any:
@@ -80,10 +83,9 @@ class PromotionScraper(ABC):
         return promos
 
     def default_output_path(self, fmt: str, details: bool) -> str:
-        """Generate output path: raw/<today>/promos[_with_details].<fmt>"""
+        """Generate output path: <OUTPUT_DIR>/raw/<today>/promos[_with_details].<fmt>"""
         today = datetime.now(THAILAND_TZ).strftime("%Y-%m-%d")
-        site_dir = os.path.dirname(os.path.abspath(inspect.getfile(self.__class__)))
-        raw_dir = os.path.join(site_dir, "raw", today)
+        raw_dir = os.path.join(self.OUTPUT_DIR, "raw", today)
         os.makedirs(raw_dir, exist_ok=True)
         filename = "promos_with_details" if details else "promos"
         return os.path.join(raw_dir, f"{filename}.{fmt}")

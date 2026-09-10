@@ -57,7 +57,6 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
 from urllib.parse import urljoin
 
 import requests
@@ -65,7 +64,7 @@ from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.base import PromotionScraper
-from shared.common import HEADERS, PROXIES, THAILAND_TZ
+from shared.common import HEADERS, PROXIES, fetch_html as _fetch_html
 from shared.date_parser import parse_thai_date_range_full
 from shared.detail_fetcher import clean_terms_text
 from shared.output import SITE_CODES, make_site_id
@@ -96,10 +95,8 @@ DETAIL_REQUEST_DELAY = 0.3
 
 
 def fetch_html(url: str) -> str:
-    resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=30)
-    resp.raise_for_status()
-    resp.encoding = resp.apparent_encoding
-    return resp.text
+    # AEON's pages are larger/slower than the other sites, so allow a longer timeout.
+    return _fetch_html(url, timeout=30)
 
 
 def build_form_category_map(html: str) -> dict:
@@ -178,13 +175,13 @@ class AeonPromotionScraper(PromotionScraper):
             if not slug:
                 continue
             for package in form.select("a.package"):
-                yield {"package": package, "slug": slug, "base_url": self.DEFAULT_URL}
+                yield {"package": package, "slug": slug}
 
-    def build_promo(self, item: dict, fetch_details: bool = False) -> dict:
+    def build_promo(self, item: dict, today, fetch_details: bool = False) -> dict:
         """Map one <a class="package"> card to the standard promo schema."""
         package = item["package"]
         slug = item["slug"]
-        base_url = item["base_url"]
+        base_url = self.DEFAULT_URL
 
         heading_el = package.select_one(".package__content-heading")
         title = heading_el.get_text(" ", strip=True) if heading_el else ""
@@ -198,7 +195,6 @@ class AeonPromotionScraper(PromotionScraper):
             image = urljoin(base_url, img["src"])
 
         date_range = extract_field(package, PERIOD_LABEL) or ""
-        today = datetime.now(THAILAND_TZ).date()
         date_start, date_end = parse_thai_date_range_full(date_range, today)
 
         card_body = extract_card_body(package)
@@ -228,7 +224,6 @@ class AeonPromotionScraper(PromotionScraper):
             "date_end": date_end,
             "link": link,
             "image": image,
-            "scraped_at": None,
             "published_at": None,
             "modified_at": None,
             "terms": terms,

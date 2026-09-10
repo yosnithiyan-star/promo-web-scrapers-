@@ -57,12 +57,11 @@ import sys
 from datetime import datetime
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.base import PromotionScraper
-from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt_str
+from shared.common import THAILAND_TZ, fetch_html, format_thai_dt_str
 from shared.date_parser import parse_date_range
 from shared.detail_fetcher import clean_terms_text
 from shared.output import SITE_CODES, make_site_id
@@ -76,13 +75,6 @@ EXCLUDED_LINKS = {
     "https://www.allonline.7eleven.co.th/",
     "https://www.allonline.7eleven.co.th",
 }
-
-
-def fetch_html(url: str) -> str:
-    resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=20)
-    resp.raise_for_status()
-    resp.encoding = resp.apparent_encoding
-    return resp.text
 
 
 def extract_next_data(html: str) -> dict:
@@ -151,15 +143,14 @@ class SevenElevenPromotionScraper(PromotionScraper):
                 if section_key in ("category", "heroBanner") and not category:
                     continue
 
-                yield {"item": item, "section_key": section_key, "category": category,
-                       "base_url": self.DEFAULT_URL}
+                yield {"item": item, "section_key": section_key, "category": category}
 
-    def build_promo(self, raw: dict, fetch_details: bool = False) -> dict:
+    def build_promo(self, raw: dict, today, fetch_details: bool = False) -> dict:
         """Map a raw 7-Eleven item dict to the standard promo schema."""
         item = raw["item"]
         section_key = raw["section_key"]
         category = raw["category"]
-        base_url = raw["base_url"]
+        base_url = self.DEFAULT_URL
 
         post_id = item.get("id")
         title = item.get("title_th", "")
@@ -185,7 +176,6 @@ class SevenElevenPromotionScraper(PromotionScraper):
             date_end = None
 
         if (not date_start or not date_end) and date_range:
-            today = datetime.now(THAILAND_TZ).date()
             parsed_start, parsed_end = parse_date_range(date_range, today)
             date_start = date_start or parsed_start
             date_end = date_end or parsed_end
@@ -204,7 +194,6 @@ class SevenElevenPromotionScraper(PromotionScraper):
             "date_end": date_end,
             "link": link,
             "image": image,
-            "scraped_at": None,
             "published_at": None,
             "modified_at": None,
             "terms": None,

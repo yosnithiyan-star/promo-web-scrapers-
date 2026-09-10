@@ -1,6 +1,6 @@
 import json
 import pytest
-from datetime import datetime
+from datetime import date, datetime
 
 from seven_eleven.seven_eleven_promo_scraper import (
     SevenElevenPromotionScraper,
@@ -14,7 +14,8 @@ BASE_URL = "https://www.7eleven.co.th/promotion"
 
 def _build(item, section_key, category, details=False):
     return SevenElevenPromotionScraper().build_promo(
-        {"item": item, "section_key": section_key, "category": category, "base_url": BASE_URL},
+        {"item": item, "section_key": section_key, "category": category},
+        date(2026, 9, 10),
         details,
     )
 

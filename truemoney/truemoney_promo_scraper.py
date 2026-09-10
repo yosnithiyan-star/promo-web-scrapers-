@@ -55,15 +55,13 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.base import PromotionScraper
-from shared.common import HEADERS, PROXIES, THAILAND_TZ
+from shared.common import fetch_html
 from shared.date_parser import parse_date_range, DATE_RANGE_RE
 from shared.detail_fetcher import fetch_promo_detail, DETAIL_REQUEST_DELAY
 from shared.output import SITE_CODES, make_site_id
@@ -71,13 +69,6 @@ from shared.output import SITE_CODES, make_site_id
 DEFAULT_URL = "https://www.truemoney.com/promotion"
 SITE_NAME = "truemoney"
 SITE_CODE = SITE_CODES[SITE_NAME]
-
-
-def fetch_html(url: str) -> str:
-    resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=20)
-    resp.raise_for_status()
-    resp.encoding = resp.apparent_encoding
-    return resp.text
 
 
 def split_title_and_date(raw_text: str):
@@ -177,11 +168,10 @@ class TrueMoneyPromotionScraper(PromotionScraper):
                     "category_slugs": category_slugs,
                     "category": current_category,
                     "image": pending_image["image_url"] if pending_image else None,
-                    "base_url": base_url,
                 }
                 pending_image = None  # consumed
 
-    def build_promo(self, item: dict, fetch_details: bool = False) -> dict:
+    def build_promo(self, item: dict, today, fetch_details: bool = False) -> dict:
         """Map one pre-parsed TrueMoney card to the standard promo schema."""
         title = item["title"]
         date_range = item["date_range"]
@@ -189,7 +179,6 @@ class TrueMoneyPromotionScraper(PromotionScraper):
         post_id = item["post_id"]
         category_slugs = item["category_slugs"]
 
-        today = datetime.now(THAILAND_TZ).date()
         date_start, date_end = parse_date_range(date_range, today)
 
         promo = {
@@ -204,7 +193,6 @@ class TrueMoneyPromotionScraper(PromotionScraper):
             "date_end": date_end,
             "link": link,
             "image": item["image"],
-            "scraped_at": None,
             "published_at": None,
             "modified_at": None,
             "terms": None,

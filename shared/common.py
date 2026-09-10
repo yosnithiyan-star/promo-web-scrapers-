@@ -3,6 +3,8 @@
 import os
 from datetime import datetime, timedelta, timezone
 
+import requests
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -33,3 +35,11 @@ def format_thai_dt_str(iso_str):
     if not iso_str:
         return None
     return format_thai_dt(datetime.fromisoformat(iso_str))
+
+
+def fetch_html(url: str, timeout: int = 20) -> str:
+    """GET a page (with shared HEADERS/PROXIES) and return decoded HTML."""
+    resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=timeout)
+    resp.raise_for_status()
+    resp.encoding = resp.apparent_encoding
+    return resp.text

@@ -1,6 +1,7 @@
 """Tests for aeon/aeon_promo_scraper.py — fixture-based, no live network."""
 
 import pytest
+from datetime import date
 
 from aeon.aeon_promo_scraper import (
     AeonPromotionScraper,
@@ -86,7 +87,7 @@ class TestExtractField:
 class TestBuildPromo:
     def _build(self, pkg, slug, details=False):
         return AeonPromotionScraper().build_promo(
-            {"package": pkg, "slug": slug, "base_url": BASE_URL}, details
+            {"package": pkg, "slug": slug}, date(2026, 9, 10), details
         )
 
     def test_schema_and_open_ended(self, soup_packages):

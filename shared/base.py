@@ -21,7 +21,7 @@ from datetime import datetime
 from typing import Any, Iterator
 
 from .common import PROXIES, THAILAND_TZ, format_thai_dt
-from .output import save_json, save_csv, SITE_CODES
+from .output import save_json, save_csv
 
 
 class PromotionScraper(ABC):
@@ -35,9 +35,6 @@ class PromotionScraper(ABC):
     SITE_NAME: str
     DEFAULT_URL: str = ""
 
-    def __init__(self, site_code: str | None = None):
-        self._site_code = site_code or SITE_CODES.get(self.SITE_NAME, self.SITE_NAME)
-
     @abstractmethod
     def fetch_data(self, url: str) -> Any:
         """Site-specific: fetch the page and parse it into a data object."""
@@ -47,10 +44,12 @@ class PromotionScraper(ABC):
         """Site-specific: yield each raw promo item from the parsed data."""
 
     @abstractmethod
-    def build_promo(self, item: dict, fetch_details: bool = False) -> dict | None:
+    def build_promo(self, item: dict, today, fetch_details: bool = False) -> dict | None:
         """Site-specific: map one raw item to the shared PROMO_FIELDNAMES schema.
 
-        Return None to skip the item (filtering happens here).
+        `today` is the single run reference date (GMT+7) for relative-date
+        parsing. `scraped_at` is filled in by the base — omit it here or leave
+        it None. Return None to skip the item (filtering happens here).
         """
 
     def scrape_promotions(self, url: str | None = None, fetch_details: bool = False) -> list[dict]:
@@ -59,11 +58,12 @@ class PromotionScraper(ABC):
         data = self.fetch_data(url)
         scraped_dt = datetime.now(THAILAND_TZ)
         scraped_at = format_thai_dt(scraped_dt)
+        today = scraped_dt.date()
 
         promos = []
         seen_ids = set()
         for item in self.iter_raw_items(data):
-            promo = self.build_promo(item, fetch_details)
+            promo = self.build_promo(item, today, fetch_details)
             if promo is None:
                 continue
             promo["scraped_at"] = scraped_at

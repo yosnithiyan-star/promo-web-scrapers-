@@ -17,8 +17,8 @@ THAILAND_TZ = timezone(timedelta(hours=7))
 
 password = os.environ.get("APIFY_PROXY_PASSWORD")
 PROXIES = (
-    {"http": f"http://session-{os.getpid()}:{password}@proxy.apify.com:8000",
-     "https": f"http://session-{os.getpid()}:{password}@proxy.apify.com:8000"}
+    {"http": f"http://session-promo_scrapers:{password}@proxy.apify.com:8000",
+     "https": f"http://session-promo_scrapers:{password}@proxy.apify.com:8000"}
     if password
     else None
 )

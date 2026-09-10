@@ -3,11 +3,20 @@ import pytest
 from datetime import datetime
 
 from seven_eleven.seven_eleven_promo_scraper import (
+    SevenElevenPromotionScraper,
     extract_next_data,
-    build_promo,
     extract_image_url,
 )
 from shared.common import THAILAND_TZ
+
+BASE_URL = "https://www.7eleven.co.th/promotion"
+
+
+def _build(item, section_key, category, details=False):
+    return SevenElevenPromotionScraper().build_promo(
+        {"item": item, "section_key": section_key, "category": category, "base_url": BASE_URL},
+        details,
+    )
 
 
 class TestExtractNextData:
@@ -83,7 +92,7 @@ class TestBuildPromo:
             "updated_at": "2026-08-23T14:00:00.000Z",
             "detail_th": "<p>Terms here</p>",
         }
-        promo = build_promo(item, "trade", "สินค้าราคาพิเศษ", "https://www.7eleven.co.th/promotion", False)
+        promo = _build(item, "trade", "สินค้าราคาพิเศษ")
 
         assert promo["id"] == "7el_3711"
         assert promo["site"] == "seven_eleven"
@@ -114,7 +123,7 @@ class TestBuildPromo:
             "updated_at": None,
             "detail_th": None,
         }
-        promo = build_promo(item, "sale", "ลดอย่างแรง", "https://www.7eleven.co.th/promotion", False)
+        promo = _build(item, "sale", "ลดอย่างแรง")
 
         assert promo["date_start"] is None
         assert promo["date_end"] is None
@@ -141,7 +150,7 @@ class TestBuildPromo:
             "updated_at": "2026-08-24T10:00:00.000Z",
             "detail_th": "<p>Full terms and conditions</p>",
         }
-        promo = build_promo(item, "test", "Test Category", "https://www.7eleven.co.th/promotion", True)
+        promo = _build(item, "test", "Test Category", True)
 
         assert promo["terms"] == "Full terms and conditions"
         assert promo["published_at"] is not None
@@ -163,14 +172,14 @@ class TestBuildPromo:
             "updated_at": "2026-08-24T10:00:00.000Z",
             "detail_th": "<p>Full terms and conditions</p>",
         }
-        promo = build_promo(item, "test", "Test Category", "https://www.7eleven.co.th/promotion", False)
+        promo = _build(item, "test", "Test Category")
 
         assert promo["terms"] is None
         assert promo["published_at"] is None
         assert promo["modified_at"] is None
 
-    def test_scraped_at_is_always_set(self):
-        """scraped_at is always populated regardless of details flag or item dates."""
+    def test_scraped_at_is_always_set(self, monkeypatch):
+        """scraped_at is always populated by the base scrape_promotions, regardless of details flag."""
         item = {
             "id": 200,
             "title_th": "Another",
@@ -183,8 +192,21 @@ class TestBuildPromo:
             "updated_at": None,
             "detail_th": None,
         }
+        next_data = {
+            "props": {"pageProps": {"trade": {"title_th": "T", "items": [item]}}}
+        }
+        monkeypatch.setattr(
+            "seven_eleven.seven_eleven_promo_scraper.fetch_html",
+            lambda url: "",
+        )
+        monkeypatch.setattr(
+            "seven_eleven.seven_eleven_promo_scraper.extract_next_data",
+            lambda html: next_data,
+        )
         for fetch_details in [True, False]:
-            promo = build_promo(item, "cat", "Category", "https://www.7eleven.co.th/promotion", fetch_details)
+            promos = SevenElevenPromotionScraper().scrape_promotions(BASE_URL, fetch_details=fetch_details)
+            assert len(promos) == 1
+            promo = promos[0]
             assert promo["scraped_at"] is not None
             assert " " in promo["scraped_at"]  # should be "YYYY-MM-DD HH:MM:SS" format
 

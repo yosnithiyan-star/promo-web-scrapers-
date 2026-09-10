@@ -4,8 +4,10 @@
 =========================================
 Scrapes https://www.7eleven.co.th/promotion and extracts, for every promo
 card in the promotion sections:
-    - post_id       (7-Eleven's own internal item id, e.g. 3711)
-    - category      (the section it appears under, e.g. "สินค้าราคาพิเศษ")
+    - id           (namespaced id, e.g. "7el_3711"; dedup key)
+    - site         ("seven_eleven")
+    - post_id      (7-Eleven's own internal item id, e.g. 3711)
+    - category     (the section it appears under, e.g. "สินค้าราคาพิเศษ")
     - category_slugs (the section key, e.g. ["trade"])
     - title      (promo headline, e.g. "อร่อยราคาพิเศษ")
     - date_range (raw display text, e.g. "24 ส.ค. - 23 ก.ย. 69" or a tagline)
@@ -19,6 +21,9 @@ With --details, also includes:
     - published_at (item's created_at timestamp, ISO 8601 with offset)
     - modified_at  (item's updated_at timestamp, ISO 8601 with offset)
     - terms        (full terms & conditions HTML text)
+
+Built on shared.PromotionScraper — only the site-specific fetch/extract/build
+logic lives here; dedup, output paths, and the CLI come from the base class.
 
 Requirements:
     pip install requests beautifulsoup4 lxml
@@ -45,12 +50,10 @@ Notes:
       Re-run periodically if you need to track changes over time.
 """
 
-import argparse
 import json
 import os
 import re
 import sys
-import time
 from datetime import datetime
 from urllib.parse import urljoin
 
@@ -58,14 +61,21 @@ import requests
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt, format_thai_dt_str
+from shared.base import PromotionScraper
+from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt_str
 from shared.date_parser import parse_date_range
 from shared.detail_fetcher import clean_terms_text
-from shared.output import save_json, save_csv, SITE_CODES, make_site_id
+from shared.output import SITE_CODES, make_site_id
 
 DEFAULT_URL = "https://www.7eleven.co.th/promotion"
 SITE_NAME = "seven_eleven"
 SITE_CODE = SITE_CODES[SITE_NAME]
+
+# Links to exclude (external redirects like AllOnline)
+EXCLUDED_LINKS = {
+    "https://www.allonline.7eleven.co.th/",
+    "https://www.allonline.7eleven.co.th",
+}
 
 
 def fetch_html(url: str) -> str:
@@ -111,160 +121,109 @@ def extract_image_url(item: dict) -> str | None:
     return None
 
 
-def build_promo(item: dict, section_key: str, category: str, base_url: str, fetch_details: bool) -> dict:
-    """Map a raw 7-Eleven item dict to the standard promo schema."""
-    post_id = item.get("id")
-    title = item.get("title_th", "")
-    date_range = (item.get("desc_th") or "").strip()
-    item_url = item.get("item_url", "")
-    link = urljoin(base_url, item_url) if item_url else ""
+class SevenElevenPromotionScraper(PromotionScraper):
+    """7-Eleven-specific scraper: __NEXT_DATA__ JSON extraction."""
 
-    start_iso = item.get("start_date")
-    end_iso = item.get("end_date")
+    SITE_NAME = SITE_NAME
+    DEFAULT_URL = DEFAULT_URL
 
-    if start_iso:
-        start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
-        start_dt_local = start_dt.astimezone(THAILAND_TZ)
-        date_start = start_dt_local.strftime("%Y-%m-%d")
-    else:
-        date_start = None
+    def fetch_data(self, url: str) -> dict:
+        return extract_next_data(fetch_html(url))
 
-    if end_iso:
-        end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
-        end_dt_local = end_dt.astimezone(THAILAND_TZ)
-        date_end = end_dt_local.strftime("%Y-%m-%d")
-    else:
-        date_end = None
+    def iter_raw_items(self, next_data: dict):
+        """Yield each buildable promo item, applying 7-Eleven's filtering rules."""
+        for section_key, category, items in iter_promo_sections(next_data):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
 
-    # If dates are missing from JSON, try to parse them from the date_range text (desc_th)
-    if (not date_start or not date_end) and date_range:
-        today = datetime.now(THAILAND_TZ).date()
-        parsed_start, parsed_end = parse_date_range(date_range, today)
-        date_start = date_start or parsed_start
-        date_end = date_end or parsed_end
+                item_url = item.get("item_url")
+                if not item_url:
+                    continue
 
-    image = extract_image_url(item)
+                # Skip external redirect links
+                resolved_link = urljoin(self.DEFAULT_URL, item_url)
+                if resolved_link in EXCLUDED_LINKS:
+                    continue
 
-    promo = {
-        "id": make_site_id(SITE_CODE, post_id, link),
-        "site": SITE_NAME,
-        "post_id": post_id,
-        "category": category if category else None,
-        "category_slugs": [section_key],
-        "title": title,
-        "date_range": date_range,
-        "date_start": date_start,
-        "date_end": date_end,
-        "link": link,
-        "image": image,
-        "scraped_at": format_thai_dt(datetime.now(THAILAND_TZ)),
-        "published_at": None,
-        "modified_at": None,
-        "terms": None,
-    }
+                # Skip section-level redirect items (category/heroBanner items
+                # with no real category) — the icon redirects at the top.
+                if section_key in ("category", "heroBanner") and not category:
+                    continue
 
-    if fetch_details:
-        created_at = item.get("created_at")
-        updated_at = item.get("updated_at")
-        promo["published_at"] = format_thai_dt_str(created_at)
-        promo["modified_at"] = format_thai_dt_str(updated_at)
-        detail_th = item.get("detail_th")
-        # Extract clean text from HTML terms
-        promo["terms"] = extract_text_from_html(detail_th) if detail_th else None
+                yield {"item": item, "section_key": section_key, "category": category,
+                       "base_url": self.DEFAULT_URL}
 
-    return promo
+    def build_promo(self, raw: dict, fetch_details: bool = False) -> dict:
+        """Map a raw 7-Eleven item dict to the standard promo schema."""
+        item = raw["item"]
+        section_key = raw["section_key"]
+        category = raw["category"]
+        base_url = raw["base_url"]
 
+        post_id = item.get("id")
+        title = item.get("title_th", "")
+        date_range = (item.get("desc_th") or "").strip()
+        item_url = item.get("item_url", "")
+        link = urljoin(base_url, item_url) if item_url else ""
 
-def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False) -> list[dict]:
-    """Fetch and scrape the 7-Eleven promotion page, returning a list of promo dicts."""
-    html = fetch_html(url)
-    next_data = extract_next_data(html)
+        start_iso = item.get("start_date")
+        end_iso = item.get("end_date")
 
-    promos = []
-    seen_ids = set()
+        if start_iso:
+            start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+            start_dt_local = start_dt.astimezone(THAILAND_TZ)
+            date_start = start_dt_local.strftime("%Y-%m-%d")
+        else:
+            date_start = None
 
-    # Links to exclude (external redirects like AllOnline)
-    excluded_links = {
-        "https://www.allonline.7eleven.co.th/",
-        "https://www.allonline.7eleven.co.th",
-    }
+        if end_iso:
+            end_dt = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
+            end_dt_local = end_dt.astimezone(THAILAND_TZ)
+            date_end = end_dt_local.strftime("%Y-%m-%d")
+        else:
+            date_end = None
 
-    for section_key, category, items in iter_promo_sections(next_data):
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            post_id = item.get("id")
-            if post_id in seen_ids:
-                print(f"Skipping duplicate post_id {post_id}", file=sys.stderr)
-                continue
-            if post_id:
-                seen_ids.add(post_id)
+        if (not date_start or not date_end) and date_range:
+            today = datetime.now(THAILAND_TZ).date()
+            parsed_start, parsed_end = parse_date_range(date_range, today)
+            date_start = date_start or parsed_start
+            date_end = date_end or parsed_end
 
-            item_url = item.get("item_url")
-            if not item_url:
-                continue
+        image = extract_image_url(item)
 
-            # Skip external redirect links
-            resolved_link = urljoin(url, item_url)
-            if resolved_link in excluded_links:
-                continue
+        promo = {
+            "id": make_site_id(SITE_CODE, post_id, link),
+            "site": SITE_NAME,
+            "post_id": post_id,
+            "category": category if category else None,
+            "category_slugs": [section_key],
+            "title": title,
+            "date_range": date_range,
+            "date_start": date_start,
+            "date_end": date_end,
+            "link": link,
+            "image": image,
+            "scraped_at": None,
+            "published_at": None,
+            "modified_at": None,
+            "terms": None,
+        }
 
-            # Skip section-level redirect items (category/heroBanner items with no real category)
-            # These are the 6 icon redirects at the top of the page
-            if section_key in ("category", "heroBanner") and not category:
-                continue
+        if fetch_details:
+            created_at = item.get("created_at")
+            updated_at = item.get("updated_at")
+            promo["published_at"] = format_thai_dt_str(created_at)
+            promo["modified_at"] = format_thai_dt_str(updated_at)
+            detail_th = item.get("detail_th")
+            # Extract clean text from HTML terms
+            promo["terms"] = extract_text_from_html(detail_th) if detail_th else None
 
-            promo = build_promo(item, section_key, category, url, fetch_details)
-            promos.append(promo)
-
-    return promos
-
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-def default_output_path(fmt: str, details: bool) -> str:
-    """Generate output path: raw/<today>/promos[_with_details].<fmt>"""
-    today = datetime.now(THAILAND_TZ).strftime("%Y-%m-%d")
-    raw_dir = os.path.join(SCRIPT_DIR, "raw", today)
-    filename = f"promos_with_details.{fmt}" if details else f"promos.{fmt}"
-    return os.path.join(raw_dir, filename)
+        return promo
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Scrape 7-Eleven promotion page")
-    parser.add_argument("--url", default=DEFAULT_URL, help="Page URL to scrape")
-    parser.add_argument("--out", default=None, help="Output file path (default: raw/<today>/promos[_with_details].<format>)")
-    parser.add_argument("--format", choices=["json", "csv"], default=None,
-                        help="Output format (inferred from --out extension if omitted; default json)")
-    parser.add_argument("--details", action=argparse.BooleanOptionalAction, default=False,
-                        help="Include terms, published_at, and modified_at fields. Enabled via --details.")
-    args = parser.parse_args()
-
-    fmt = args.format
-    if not fmt:
-        if args.out and args.out.endswith(".csv"):
-            fmt = "csv"
-        else:
-            fmt = "json"
-
-    out_path = args.out or default_output_path(fmt, args.details)
-
-    proxies_status = "Using Apify proxy" if PROXIES else "No proxy configured"
-    print(f"Scraping {args.url}... ({proxies_status})", file=sys.stderr)
-
-    start = time.time()
-    promos = scrape_promotions(args.url, fetch_details=args.details)
-    elapsed = time.time() - start
-
-    print(f"Found {len(promos)} promotions in {elapsed:.1f}s", file=sys.stderr)
-
-    if fmt == "csv":
-        save_csv(promos, out_path)
-    else:
-        save_json(promos, out_path)
-
-    print(f"Saved to {out_path}", file=sys.stderr)
+    SevenElevenPromotionScraper().main()
 
 
 if __name__ == "__main__":

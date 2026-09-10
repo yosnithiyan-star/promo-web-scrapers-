@@ -4,8 +4,10 @@ TrueMoney Promotion Page Scraper
 =================================
 Scrapes https://www.truemoney.com/promotion and extracts, for every promo
 card on the page:
-    - post_id       (the site's own WordPress post id, e.g. 236401)
-    - category      (the section it appears under, e.g. "7-Eleven", "Lotus's")
+    - id           (namespaced id, e.g. "tmn_236401"; dedup key)
+    - site         ("truemoney")
+    - post_id      (the site's own WordPress post id, e.g. 236401)
+    - category     (the section it appears under, e.g. "7-Eleven", "Lotus's")
     - category_slugs (the site's own taxonomy slugs, e.g. ["promo-alipayreward"];
                        a promo can belong to more than one)
     - title      (promo headline, with the trailing date range stripped out)
@@ -22,6 +24,9 @@ With --details, also fetches each promo's own detail page for:
     - terms        (full terms & conditions text, when the detail page has one;
                      if the page is just a client-side redirect stub, the
                      redirect target is followed once and scraped instead)
+
+Built on shared.PromotionScraper — only the site-specific fetch/extract/build
+logic lives here; dedup, output paths, and the CLI come from the base class.
 
 Requirements:
     pip install requests beautifulsoup4 lxml
@@ -46,7 +51,6 @@ Notes:
       own detail page (one extra request per promo, with a short delay).
 """
 
-import argparse
 import os
 import re
 import sys
@@ -57,12 +61,12 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-# Import from shared modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.common import HEADERS, PROXIES, THAILAND_TZ, format_thai_dt
+from shared.base import PromotionScraper
+from shared.common import HEADERS, PROXIES, THAILAND_TZ
 from shared.date_parser import parse_date_range, DATE_RANGE_RE
 from shared.detail_fetcher import fetch_promo_detail, DETAIL_REQUEST_DELAY
-from shared.output import save_json, save_csv, SITE_CODES, make_site_id
+from shared.output import SITE_CODES, make_site_id
 
 DEFAULT_URL = "https://www.truemoney.com/promotion"
 SITE_NAME = "truemoney"
@@ -109,156 +113,114 @@ def parse_article_identity(article):
     return post_id, category_slugs
 
 
-def scrape_promotions(url: str = DEFAULT_URL, fetch_details: bool = False):
-    html = fetch_html(url)
-    soup = BeautifulSoup(html, "lxml")
+class TrueMoneyPromotionScraper(PromotionScraper):
+    """TrueMoney-specific scraper: WordPress DOM scraping of /promotion."""
 
-    # The page's main promo content lives after the nav; scope to <body>
-    # and walk elements in document order so we can track the "current
-    # category" (h3/h4 section headers) and the most recent <img> seen
-    # (which precedes each promo's <h2> title link in the markup).
-    body = soup.body or soup
+    SITE_NAME = SITE_NAME
+    DEFAULT_URL = DEFAULT_URL
 
-    scraped_dt = datetime.now(THAILAND_TZ)
-    scraped_at = format_thai_dt(scraped_dt)
-    today = scraped_dt.date()
-    promos = []
-    seen_keys = set()
-    current_category = None
-    pending_image = None
+    def fetch_data(self, url: str):
+        return BeautifulSoup(fetch_html(url), "lxml")
 
-    for el in body.descendants:
-        if not hasattr(el, "name") or el.name is None:
-            continue
+    def iter_raw_items(self, soup):
+        """Walk the page DOM and yield each promo card's pre-parsed data.
 
-        # Section headers used as category labels
-        if el.name in ("h3", "h4"):
-            text = el.get_text(strip=True)
-            if text:
-                current_category = text
-            continue
+        The page's main promo content lives after the nav; we scope to <body>
+        and walk elements in document order to track the "current category"
+        (h3/h4 section headers) and the most recent <img> seen (which precedes
+        each promo's <h2> title link in the markup).
+        """
+        body = soup.body or soup
+        base_url = self.DEFAULT_URL
+        current_category = None
+        pending_image = None
 
-        # Track the most recent banner/card image
-        if el.name == "img":
-            src = el.get("src") or el.get("data-src") or ""
-            if src and not src.startswith("data:"):
-                parent_a = el.find_parent("a")
-                pending_image = {
-                    "image_url": urljoin(url, src),
-                    "image_link": urljoin(parent_a["href"], "") if parent_a and parent_a.get("href") else None,
+        for el in body.descendants:
+            if not hasattr(el, "name") or el.name is None:
+                continue
+
+            # Section headers used as category labels
+            if el.name in ("h3", "h4"):
+                text = el.get_text(strip=True)
+                if text:
+                    current_category = text
+                continue
+
+            # Track the most recent banner/card image
+            if el.name == "img":
+                src = el.get("src") or el.get("data-src") or ""
+                if src and not src.startswith("data:"):
+                    parent_a = el.find_parent("a")
+                    pending_image = {
+                        "image_url": urljoin(base_url, src),
+                        "image_link": urljoin(parent_a["href"], "") if parent_a and parent_a.get("href") else None,
+                    }
+                continue
+
+            # Promo title + link
+            if el.name == "h2":
+                a_tag = el.find("a")
+                if not a_tag or not a_tag.get("href"):
+                    continue
+                raw_text = a_tag.get_text(strip=True)
+                if not raw_text:
+                    continue
+                title, date_range = split_title_and_date(raw_text)
+                link = urljoin(base_url, a_tag["href"])
+                post_id, category_slugs = parse_article_identity(el.find_parent("article"))
+
+                yield {
+                    "title": title,
+                    "date_range": date_range,
+                    "link": link,
+                    "post_id": post_id,
+                    "category_slugs": category_slugs,
+                    "category": current_category,
+                    "image": pending_image["image_url"] if pending_image else None,
+                    "base_url": base_url,
                 }
-            continue
+                pending_image = None  # consumed
 
-        # Promo title + link
-        if el.name == "h2":
-            a_tag = el.find("a")
-            if not a_tag or not a_tag.get("href"):
-                continue
-            raw_text = a_tag.get_text(strip=True)
-            if not raw_text:
-                continue
-            title, date_range = split_title_and_date(raw_text)
-            link = urljoin(url, a_tag["href"])
-            date_start, date_end = parse_date_range(date_range, today)
-            post_id, category_slugs = parse_article_identity(el.find_parent("article"))
+    def build_promo(self, item: dict, fetch_details: bool = False) -> dict:
+        """Map one pre-parsed TrueMoney card to the standard promo schema."""
+        title = item["title"]
+        date_range = item["date_range"]
+        link = item["link"]
+        post_id = item["post_id"]
+        category_slugs = item["category_slugs"]
 
-            dedup_key = make_site_id(SITE_CODE, post_id, link)
-            if dedup_key in seen_keys:
-                print(f"Skipping duplicate promo (post_id={post_id}): {link}", file=sys.stderr)
-                pending_image = None
-                continue
-            seen_keys.add(dedup_key)
+        today = datetime.now(THAILAND_TZ).date()
+        date_start, date_end = parse_date_range(date_range, today)
 
-            promo = {
-                "id": make_site_id(SITE_CODE, post_id, link),
-                "site": SITE_NAME,
-                "post_id": post_id,
-                "category": current_category,
-                "category_slugs": category_slugs,
-                "title": title,
-                "date_range": date_range,
-                "date_start": date_start,
-                "date_end": date_end,
-                "link": link,
-                "image": pending_image["image_url"] if pending_image else None,
-                "scraped_at": scraped_at,
-                "published_at": None,
-                "modified_at": None,
-                "terms": None,
-            }
-            if fetch_details:
-                published_at, modified_at, terms = fetch_promo_detail(link)
-                promo["published_at"] = published_at
-                promo["modified_at"] = modified_at
-                promo["terms"] = terms
-                time.sleep(DETAIL_REQUEST_DELAY)
-            promos.append(promo)
-            pending_image = None  # consumed
-
-    return promos
-
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-
-def default_output_path(fmt: str, details: bool) -> str:
-    """Generate output path for backward compatibility with TrueMoney script.
-
-    Saves to raw/<today>/... relative to truemoney folder, not data/raw/.
-    (shared.output.default_output_path uses data/raw/{site_name}/... for multi-site).
-    This local version preserves the original folder structure.
-    """
-    today = datetime.now(THAILAND_TZ).strftime("%Y-%m-%d")
-    raw_dir = os.path.join(SCRIPT_DIR, "raw", today)
-    os.makedirs(raw_dir, exist_ok=True)
-    basename = "promos_with_details" if details else "promos"
-    return os.path.join(raw_dir, f"{basename}.{fmt}")
+        promo = {
+            "id": make_site_id(SITE_CODE, post_id, link),
+            "site": SITE_NAME,
+            "post_id": post_id,
+            "category": item["category"],
+            "category_slugs": category_slugs,
+            "title": title,
+            "date_range": date_range,
+            "date_start": date_start,
+            "date_end": date_end,
+            "link": link,
+            "image": item["image"],
+            "scraped_at": None,
+            "published_at": None,
+            "modified_at": None,
+            "terms": None,
+        }
+        if fetch_details:
+            published_at, modified_at, terms = fetch_promo_detail(link)
+            promo["published_at"] = published_at
+            promo["modified_at"] = modified_at
+            promo["terms"] = terms
+            time.sleep(DETAIL_REQUEST_DELAY)
+        return promo
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Scrape TrueMoney promotion page")
-    parser.add_argument("--url", default=DEFAULT_URL, help="Page URL to scrape")
-    parser.add_argument(
-        "--out", default=None,
-        help="Output file path (default: raw/<today>/promos[_with_details].<format>)",
-    )
-    parser.add_argument(
-        "--format", choices=["json", "csv"], default=None,
-        help="Output format (inferred from --out extension if omitted; default json)",
-    )
-    parser.add_argument(
-        "--details", action=argparse.BooleanOptionalAction, default=False,
-        help=(
-            "Also fetch each promo's own detail page for published_at/modified_at "
-            "timestamps and full terms text. Adds one extra HTTP request per promo. "
-            "Disabled by default; pass --details to enable it."
-        ),
-    )
-    args = parser.parse_args()
-
-    if args.format:
-        fmt = args.format
-    elif args.out and args.out.lower().endswith(".csv"):
-        fmt = "csv"
-    else:
-        fmt = "json"
-
-    out_path = args.out or default_output_path(fmt, args.details)
-
-    print(f"Proxy: {'Apify Proxy (rotating)' if PROXIES else 'none (direct connection)'}", file=sys.stderr)
-    print(f"Fetching {args.url} ...", file=sys.stderr)
-    t0 = time.time()
-    promos = scrape_promotions(args.url, fetch_details=args.details)
-    print(f"Found {len(promos)} promos in {time.time() - t0:.1f}s", file=sys.stderr)
-
-    if fmt == "csv":
-        save_csv(promos, out_path)
-    else:
-        save_json(promos, out_path)
-
-    print(f"Saved to {out_path}", file=sys.stderr)
+    TrueMoneyPromotionScraper().main()
 
 
 if __name__ == "__main__":
     main()
-    

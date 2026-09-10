@@ -1,13 +1,11 @@
 """Tests for aeon/aeon_promo_scraper.py — fixture-based, no live network."""
 
 import pytest
-from datetime import date
 
 from aeon.aeon_promo_scraper import (
-    scrape_promotions,
+    AeonPromotionScraper,
     build_form_category_map,
     extract_field,
-    build_promo,
     fetch_terms,
     AEON_CATEGORIES,
     SITE_CODE,
@@ -87,12 +85,15 @@ class TestExtractField:
 
 class TestBuildPromo:
     def _build(self, pkg, slug, details=False):
-        return build_promo(pkg, slug, BASE_URL, "2026-09-10 12:00:00", date(2026, 9, 10), details)
+        return AeonPromotionScraper().build_promo(
+            {"package": pkg, "slug": slug, "base_url": BASE_URL}, details
+        )
 
     def test_schema_and_open_ended(self, soup_packages):
         p = self._build(soup_packages["insurance-big-care-counter"], "insurance")
         assert p["site"] == "aeon"
-        assert p["post_id"].startswith(f"{SITE_CODE}_")  # slug-derived namespaced id
+        assert p["id"].startswith(f"{SITE_CODE}_")  # namespaced id
+        assert p["post_id"] is None  # AEON has no native id
         assert p["category"] == "ประกันภัย"
         assert p["category_slugs"] == ["insurance"]
         assert p["title"] == "ประกันบิ๊กแคร์"
@@ -100,7 +101,7 @@ class TestBuildPromo:
         assert p["date_end"] is None  # เป็นต้นไป
         assert p["link"] == BASE_URL + "insurance-big-care-counter"
         assert p["image"].startswith("https://www.aeon.co.th/contentAsset/")
-        assert p["post_id"].startswith(f"{SITE_CODE}_")
+        assert p["id"].startswith(f"{SITE_CODE}_")
         assert p["terms"] is None
 
     def test_range_with_year_backfill(self, soup_packages):
@@ -204,7 +205,7 @@ class TestScrapePromotions:
         monkeypatch.setattr(
             "aeon.aeon_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
         )
-        promos = scrape_promotions(BASE_URL)
+        promos = AeonPromotionScraper().scrape_promotions(BASE_URL)
         assert len(promos) == 3
         slugs = {p["category_slugs"][0] for p in promos}
         assert slugs == {"insurance", "credit-card"}
@@ -213,8 +214,8 @@ class TestScrapePromotions:
         monkeypatch.setattr(
             "aeon.aeon_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
         )
-        promos = scrape_promotions(BASE_URL)
-        ids = [p["post_id"] for p in promos]
+        promos = AeonPromotionScraper().scrape_promotions(BASE_URL)
+        ids = [p["id"] for p in promos]
         assert len(ids) == len(set(ids))
 
     def test_all_categories_known(self):

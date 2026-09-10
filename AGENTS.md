@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Project guide for Claude Code. Read this before making changes.
+Project guide for Codex. Read this before making changes.
 
 ## What this is
 
@@ -29,16 +29,14 @@ python truemoney/truemoney_promo_scraper.py --out path/to/out.json  # override p
 ```
 
 Run tests with `python -m pytest tests/ -q` (currently 80 passing: 16 date
-parser + 14 seven_eleven + 17 AEON + 11 TrueMoney + 9 shared_helpers + 1 +
-misc).
+parser + 14 seven_eleven + 17 AEON + 11 TrueMoney + 9 shared_helpers + 1).
 
 ## Shared modules (`shared/`)
 
 - `base.py` — `PromotionScraper` ABC. Holds the orchestration every site shares
   (fetch → iterate → build → dedup by namespaced `id` → save) plus the CLI
   (`main`) and `default_output_path`. A site subclasses it and implements only
-  `fetch_data`, `iter_raw_items`, `build_promo`. Each scraper's module just
-  defines its subclass and a `main()` that delegates.
+  `fetch_data`, `iter_raw_items`, `build_promo`.
 - `common.py` — HEADERS, THAILAND_TZ (GMT+7), Apify proxy (enabled only if
   `APIFY_PROXY_PASSWORD` is set), `format_thai_dt*` helpers.
 - `date_parser.py` — Thai Buddhist-era date parsing. Handles ranges
@@ -56,18 +54,21 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 `image`, `scraped_at`, `published_at`, `modified_at`, `terms`.
 
 - `id` is the namespaced, cross-site-unique id (e.g. `tmn_236401`,
-  `7el_3711`, `aeon_e564eb`) built by `shared.output.make_site_id`.
-- `post_id` is the site's **native id**: a numeric id for TrueMoney/7-Eleven
-  (e.g. `236401`, `3711`); AEON has no native id, so it uses a slug-derived
-  string in `post_id` alongside its namespaced `id`.
-- `site` holds the site code (e.g. `truemoney`, `seven_eleven`, `aeon`), the
-  key into `shared.output.SITE_CODES`.
+  `7el_3711`, `aeon_e564eb`) built by `shared.output.make_site_id`; it's the
+  dedup key.
+- `post_id` is the site's **native id**: numeric for TrueMoney/7-Eleven
+  (e.g. `236401`, `3711`); AEON has no native id, so `post_id` is `None`.
+- `site` holds the site code (e.g. `truemoney`, `aeon`), the key into
+  `shared.output.SITE_CODES`.
 - Dates are ISO `YYYY-MM-DD`. `scraped_at` is `YYYY-MM-DD HH:MM:SS` in GMT+7.
 - `terms` must be plain text — strip HTML before storing.
 - `--details` adds `published_at`/`modified_at`/`terms` and is off by default.
   For 7-Eleven these fields come from the embedded JSON (no extra request);
-  for TrueMoney each adds a per-promo request (~40s for 35 promos); for AEON
-  each adds a per-promo detail fetch (~3.5 min for 171 promos).
+  for TrueMoney and AEON each adds a per-promo request (TrueMoney ~40s for 35
+  promos; AEON ~3.5 min for 171 promos).
+- **7-Eleven dates are already ISO** in the JSON blob — no Thai parsing there.
+  TrueMoney uses `shared/date_parser` for Thai strings; AEON uses full-name Thai
+  Buddhist-era strings via `parse_thai_date_range_full`.
 
 ## Conventions & gotchas
 
@@ -75,10 +76,9 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
   changes constantly. A run writes one dated file per day; re-running the
   same day overwrites it (no append/versioning).
 - **7-Eleven dates are already ISO** in the JSON blob — no Thai parsing there.
-  TrueMoney needs `shared/date_parser` for Thai strings; AEON uses full-name
-  Thai Buddhist-era strings via `parse_thai_date_range_full`.
-- **Dedup by `id`** (the namespaced id). Do not let a non-unique id silently
-  drop promos — log duplicates to stderr.
+  TrueMoney needs `shared/date_parser` for Thai strings.
+- **Dedup by `post_id`** (falling back to `link` in TrueMoney). Do not let a
+  non-unique `post_id` silently drop promos — log duplicates to stderr.
 - Output `raw/` and `__pycache__/` are git-ignored; scraped data is not committed.
 
 ## Git
@@ -95,8 +95,8 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 ## Planned / deferred
 
 - **Namespaced IDs**: implemented. `shared.output.SITE_CODES` holds the locked
-  site codes; `make_site_id` builds `id` (and `post_id` where a site has no
-  native id). Every scraper emits `id`, `site`, `post_id`.
+  site codes; `make_site_id` builds the namespaced `id` (and `post_id` where a
+  site has no native id). Every scraper emits `id`, `site`, `post_id`.
 - **`shared/base.py` abstract base class** (`PromotionScraper` ABC):
   implemented. All three scrapers now subclass it; a new site only implements
   `fetch_data`, `iter_raw_items`, `build_promo`. See memory `future-base-class`.

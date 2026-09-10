@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any, Iterator
 
 from .common import PROXIES, THAILAND_TZ, format_thai_dt
+from .link_identity import canonicalize_link, load_seen_store, save_seen_store
 from .output import save_json, save_csv
 
 
@@ -56,12 +57,22 @@ class PromotionScraper(ABC):
         """
 
     def scrape_promotions(self, url: str | None = None, fetch_details: bool = False) -> list[dict]:
-        """Fetch, extract, dedup, and return the list of promo dicts."""
+        """Fetch, extract, dedup, and return the list of promo dicts.
+
+        Duplicates are judged in two ways: intra-run by the namespaced `id`
+        (silently the run's own repeats are skipped, matching prior behavior)
+        and cross-run by the canonicalized `link`. When a link was previously
+        scraped under a different id (e.g. a site re-numbered a `post_id`),
+        the promo is still emitted but flagged on stderr instead of dropped.
+        """
         url = url or self.DEFAULT_URL
         data = self.fetch_data(url)
         scraped_dt = datetime.now(THAILAND_TZ)
         scraped_at = format_thai_dt(scraped_dt)
         today = scraped_dt.date()
+
+        seen_store = load_seen_store(self._seen_store_path())
+        site_links = seen_store.setdefault(self.SITE_NAME, {})
 
         promos = []
         seen_ids = set()
@@ -71,7 +82,7 @@ class PromotionScraper(ABC):
                 continue
             promo["scraped_at"] = scraped_at
             promo_id = promo.get("id")
-            if promo_id in seen_ids:
+            if promo_id and promo_id in seen_ids:
                 print(
                     f"Skipping duplicate promo (id={promo_id}): {promo.get('link', '')}",
                     file=sys.stderr,
@@ -79,8 +90,41 @@ class PromotionScraper(ABC):
                 continue
             if promo_id:
                 seen_ids.add(promo_id)
+            self._flag_identity_change(promo, site_links)
             promos.append(promo)
+
+        self._update_seen_store(site_links, promos)
+        save_seen_store(self._seen_store_path(), seen_store)
         return promos
+
+    def _seen_store_path(self) -> str:
+        """Path of the cross-run seen-store: <OUTPUT_DIR>/raw/seen.json."""
+        return os.path.join(self.OUTPUT_DIR, "raw", "seen.json")
+
+    def _flag_identity_change(self, promo: dict, site_links: dict) -> None:
+        """Warn when a link was previously scraped under a different identity."""
+        link = canonicalize_link(str(promo.get("link") or ""))
+        if not link:
+            return
+        promo_id = promo.get("id")
+        prior = site_links.get(link)
+        if prior and prior.get("id") and prior["id"] != promo_id:
+            print(
+                f"Promo re-numbered: {prior['id']} -> {promo_id} "
+                f"(link={promo.get('link', '')})",
+                file=sys.stderr,
+            )
+
+    def _update_seen_store(self, site_links: dict, promos: list[dict]) -> None:
+        """Record each current promo's identity under its canonical link."""
+        for promo in promos:
+            link = canonicalize_link(str(promo.get("link") or ""))
+            if not link:
+                continue
+            site_links[link] = {
+                "id": promo.get("id"),
+                "post_id": promo.get("post_id"),
+            }
 
     def default_output_path(self, fmt: str, details: bool) -> str:
         """Generate output path: <OUTPUT_DIR>/raw/<today>/promos[_with_details].<fmt>"""

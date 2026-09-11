@@ -50,18 +50,19 @@ sites use it differently.
   พ.ย. 69"`, or open-ended `"... เป็นต้นไป"`).
 - **`date_start` / `date_end`** — the parsed ISO `YYYY-MM-DD` dates.
   `date_end` is `None` for open-ended ranges.
-- **`terms`** — the promo's detail content. **Uniform across all sites: a list of
-  content blocks** `{section_title, content, type}` (see **Content block**
-  below). Empty list `[]` when a site exposes no detail (or `--details` is off).
-  Two legacy shapes (plain string; `{label, text}` list) are coerced to blocks by
-  `shared.output.normalize_terms`.
-- **Content block** — one `{section_title, content, type, term_detail}` element
-  of `terms`. `content` is clean single-line text (`clean_terms_text` output), or
-  `None` if the block carries no text. `type` comes from a stable taxonomy
-  (`short_detail | conditions | reward_tiers | meta`; see **`type` taxonomy**).
-  `term_detail` is the block's 1-based position in the promo's `terms` list —
-  a stable numbered label (`term_detail_1`, `term_detail_2`, ...) so consumers
-  can address sections positionally regardless of type; stamped by
+- **`terms`** — the promo's detail content. **Uniform across all sites: an object
+  keyed by `term_detail_N`** (`{"term_detail_1": {...}, "term_detail_2": {...}}`),
+  where each value is a **Content block** `{section_title, content, type}` (see
+  below). Empty object `{}` when a site exposes no detail (or `--details` is
+  off). Two legacy shapes (plain string; `{label, text}` list) are coerced to
+  keyed blocks by `shared.output.normalize_terms`.
+- **Content block** — one value of `terms`, `{section_title, content, type}`,
+  addressed by its `term_detail_N` key. `content` is clean single-line text
+  (`clean_terms_text` output), or `None` if the block carries no text. `type`
+  comes from a stable taxonomy (`short_detail | conditions | reward_tiers |
+  meta`; see **`type` taxonomy**). The `term_detail_N` key is the block's 1-based
+  position — `term_detail_1`, `term_detail_2`, ... — so consumers can address a
+  section by its numbered key (`terms["term_detail_2"]["content"]`); assigned by
   `shared.output.number_blocks`. For sites whose detail prose has heading
   structure (e.g. FirstChoice), each h2/h3 section becomes its own numbered
   block. `section_title` is `None` for a section with no preceding heading.

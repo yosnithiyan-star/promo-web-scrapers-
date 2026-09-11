@@ -57,50 +57,54 @@ class TestContentBlock:
 
 class TestNormalizeTerms:
     def test_none_to_empty(self):
-        assert normalize_terms(None) == []
+        assert normalize_terms(None) == {}
 
     def test_string_to_conditions_block(self):
-        assert normalize_terms("สแกน") == [
-            {"section_title": None, "content": "สแกน", "type": "conditions", "term_detail": 1}
-        ]
+        assert normalize_terms("สแกน") == {
+            "term_detail_1": {"section_title": None, "content": "สแกน", "type": "conditions"}
+        }
 
     def test_empty_string_to_empty(self):
-        assert normalize_terms("") == []
+        assert normalize_terms("") == {}
 
     def test_legacy_label_text_to_blocks(self):
         out = normalize_terms([{"label": "detail", "text": "a"}, {"label": "tables", "text": "b"}])
-        assert out == [
-            {"section_title": "detail", "content": "a", "type": "conditions", "term_detail": 1},
-            {"section_title": "tables", "content": "b", "type": "reward_tiers", "term_detail": 2},
-        ]
+        assert out == {
+            "term_detail_1": {"section_title": "detail", "content": "a", "type": "conditions"},
+            "term_detail_2": {"section_title": "tables", "content": "b", "type": "reward_tiers"},
+        }
 
-    def test_already_blocks_get_stamped(self):
+    def test_already_blocks_get_keyed(self):
         blocks = [content_block(None, "a", "conditions")]
         out = normalize_terms(blocks)
-        assert out == [
-            {"section_title": None, "content": "a", "type": "conditions", "term_detail": 1}
-        ]
+        assert out == {
+            "term_detail_1": {"section_title": None, "content": "a", "type": "conditions"}
+        }
 
     def test_non_dict_items_skipped(self):
-        assert normalize_terms(["nope", {"label": "detail", "text": "ok"}]) == [
-            {"section_title": "detail", "content": "ok", "type": "conditions", "term_detail": 1}
-        ]
+        assert normalize_terms(["nope", {"label": "detail", "text": "ok"}]) == {
+            "term_detail_1": {"section_title": "detail", "content": "ok", "type": "conditions"}
+        }
 
 
 class TestNumberBlocks:
-    def test_stamps_sequential_term_detail(self):
+    def test_keys_blocks_by_term_detail_N(self):
         blocks = [
             content_block("a", "x", "short_detail"),
             content_block("b", "y", "conditions"),
         ]
         out = number_blocks(blocks)
-        assert [b["term_detail"] for b in out] == [1, 2]
-        assert [b["type"] for b in out] == ["short_detail", "conditions"]
+        assert list(out.keys()) == ["term_detail_1", "term_detail_2"]
+        assert out["term_detail_1"] == {"section_title": "a", "content": "x", "type": "short_detail"}
+        assert out["term_detail_2"] == {"section_title": "b", "content": "y", "type": "conditions"}
+
+    def test_empty_returns_empty_dict(self):
+        assert number_blocks([]) == {}
 
     def test_does_not_mutate_input(self):
         blocks = [content_block(None, "x", "conditions")]
         number_blocks(blocks)
-        assert "term_detail" not in blocks[0]
+        assert blocks[0] == {"section_title": None, "content": "x", "type": "conditions"}
 
 
 class TestCleanTermsText:
@@ -171,10 +175,10 @@ class TestSaveCsvBlockProjection:
             "date_end": "2026-11-15", "link": "https://x/p",
             "image": None, "scraped_at": "2026-09-12 00:00:00",
             "published_at": None, "modified_at": None,
-            "terms": [
-                {"section_title": "เงื่อนไข", "content": "ข้อ 1 ข้อ 2", "type": "conditions"},
-                {"section_title": "รางวัล", "content": "ยอดใช้จ่าย | 3%", "type": "reward_tiers"},
-            ],
+            "terms": {
+                "term_detail_1": {"section_title": "เงื่อนไข", "content": "ข้อ 1 ข้อ 2", "type": "conditions"},
+                "term_detail_2": {"section_title": "รางวัล", "content": "ยอดใช้จ่าย | 3%", "type": "reward_tiers"},
+            },
         }]
         save_csv(promos, out)
         with open(out, encoding="utf-8-sig") as f:

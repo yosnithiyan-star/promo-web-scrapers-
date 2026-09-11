@@ -127,9 +127,9 @@ class TestBuildPromo:
         assert p["published_at"] is None
         assert p["modified_at"] is None
         # Stage-1 short detail from the card subtitle is a short_detail block.
-        assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1}
-        ]
+        assert p["terms"] == {
+            "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"}
+        }
 
     def test_open_ended_date_end_is_none(self, scraper, promos):
         p = promos[1]
@@ -144,9 +144,9 @@ class TestBuildPromo:
         soup = __import__("bs4").BeautifulSoup(SAMPLE_HTML, "lxml")
         card = soup.find("div", class_="promotionContentBox")
         p = self._build(scraper, {"card": card})
-        assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1}
-        ]
+        assert p["terms"] == {
+            "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"}
+        }
 
     def test_details_appends_section_blocks(self, scraper, monkeypatch):
         monkeypatch.setattr(
@@ -158,10 +158,10 @@ class TestBuildPromo:
         )
         promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
         p = promos[0]
-        assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1},
-            {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions", "term_detail": 2},
-        ]
+        assert p["terms"] == {
+            "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
+            "term_detail_2": {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions"},
+        }
 
     def test_details_sections_numbered_in_order(self, scraper, monkeypatch):
         monkeypatch.setattr(
@@ -176,11 +176,11 @@ class TestBuildPromo:
         )
         promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
         p = promos[0]
-        assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1},
-            {"section_title": "ครั้งที่ 1", "content": "ยอดใช้จ่าย | 3%", "type": "conditions", "term_detail": 2},
-            {"section_title": "ครั้งที่ 2", "content": "ยอดใช้จ่าย | 5%", "type": "conditions", "term_detail": 3},
-        ]
+        assert p["terms"] == {
+            "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
+            "term_detail_2": {"section_title": "ครั้งที่ 1", "content": "ยอดใช้จ่าย | 3%", "type": "conditions"},
+            "term_detail_3": {"section_title": "ครั้งที่ 2", "content": "ยอดใช้จ่าย | 5%", "type": "conditions"},
+        }
 
 
 class TestFetchDetail:

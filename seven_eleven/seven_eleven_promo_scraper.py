@@ -197,7 +197,7 @@ class SevenElevenPromotionScraper(PromotionScraper):
             "image": image,
             "published_at": None,
             "modified_at": None,
-            "terms": [],
+            "terms": {},
         }
 
         if fetch_details:

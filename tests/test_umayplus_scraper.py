@@ -98,7 +98,7 @@ class TestBuildPromo:
         assert p["date_start"] == "2026-08-01"
         assert p["date_end"] == "2026-09-30"
         assert p["category"] == "โปรโมชัน"
-        assert p["terms"] == []  # no --details -> empty block list
+        assert p["terms"] == {}  # no --details -> empty block object
         # grid card extraction
         p2 = by_id["uma_2026-060000004"]
         assert p2["title"] == "AIS Sales"
@@ -116,7 +116,7 @@ class TestBuildPromo:
         promos = self._scrape(fetch_details=True)
         assert len(promos) == 2
         for p in promos:
-            assert p["terms"] == [{"section_title": "เงื่อนไข", "content": "TERMS " + p["post_id"], "type": "conditions", "term_detail": 1}]
+            assert p["terms"] == {"term_detail_1": {"section_title": "เงื่อนไข", "content": "TERMS " + p["post_id"], "type": "conditions"}}
             assert p["published_at"] is None
             assert p["modified_at"] is None
 

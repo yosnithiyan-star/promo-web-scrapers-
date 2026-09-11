@@ -79,14 +79,15 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 - `site` holds the site code (e.g. `truemoney`, `seven_eleven`, `aeon`), the
   key into `shared.output.SITE_CODES`.
 - Dates are ISO `YYYY-MM-DD`. `scraped_at` is `YYYY-MM-DD HH:MM:SS` in GMT+7.
-- `terms` is a **uniform block list** — `[{section_title, content, type, term_detail}]` —
-  across all sites, built via `shared.output.content_block` and stamped with a
-  1-based `term_detail` position by `shared.output.number_blocks` (`term_detail_1`,
-  `term_detail_2`, ...). `type` is one of `short_detail` (stage-1 card text),
-  `conditions` (detail-page prose), `reward_tiers` (a flattened reward `<table>`),
-  `meta`. FirstChoice additionally splits its detail prose at the h2/h3 headings
-  so each heading + body is its own numbered block. `content` is clean single-line
-  text (`clean_terms_text` output), never raw HTML. Empty list `[]` when `--details`
+- `terms` is a **uniform object keyed by `term_detail_N`** — `{"term_detail_1":
+  {section_title, content, type}, ...}` — across all sites, built via
+  `shared.output.content_block` and grouped by `shared.output.number_blocks` so
+  each section is addressed by its numbered key (`terms["term_detail_2"]`).
+  `type` is one of `short_detail` (stage-1 card text), `conditions` (detail-page
+  prose), `reward_tiers` (a flattened reward `<table>`), `meta`. FirstChoice
+  additionally splits its detail prose at the h2/h3 headings so each heading +
+  body is its own numbered block. `content` is clean single-line text
+  (`clean_terms_text` output), never raw HTML. Empty object `{}` when `--details`
   is off or a site exposes no detail. Legacy shapes (plain string / `{label, text}`
   list) are coerced by `shared.output.normalize_terms`.
 - `--details` adds `published_at`/`modified_at`/`terms` and is off by default.

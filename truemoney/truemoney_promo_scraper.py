@@ -196,7 +196,7 @@ class TrueMoneyPromotionScraper(PromotionScraper):
             "image": item["image"],
             "published_at": None,
             "modified_at": None,
-            "terms": [],
+            "terms": {},
         }
         if fetch_details:
             published_at, modified_at, terms = fetch_promo_detail(link)

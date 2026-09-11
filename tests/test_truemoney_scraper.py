@@ -109,4 +109,4 @@ class TestScrapePromotions:
         p = promos[0]
         assert p["published_at"] == "2026-07-20 08:00:00"
         assert p["modified_at"] == "2026-07-21 09:00:00"
-        assert p["terms"] == [{"section_title": "เงื่อนไข", "content": "Terms text here", "type": "conditions", "term_detail": 1}]
+        assert p["terms"] == {"term_detail_1": {"section_title": "เงื่อนไข", "content": "Terms text here", "type": "conditions"}}

@@ -58,19 +58,14 @@ def content_block(section_title: str | None, content: str | None, block_type: st
     return {"section_title": section_title, "content": content, "type": block_type}
 
 
-def number_blocks(blocks: list[dict]) -> list[dict]:
-    """Stamp each block with its 1-based `term_detail` position.
+def number_blocks(blocks: list[dict]) -> dict[str, dict]:
+    """Group a list of blocks into an object keyed by term_detail_N.
 
-    Gives every block a stable numbered label (term_detail_1, term_detail_2, ...)
-    so consumers can address sections positionally regardless of type. Blocks are
-    copied, not mutated, so callers keep their own lists intact.
+    Returns {term_detail_1: {section_title, content, type}, ...} so consumers
+    can address each section by its numbered key (terms["term_detail_2"]).
+    Keys are stable 1-based positions; the order of the input list is preserved.
     """
-    out = []
-    for i, block in enumerate(blocks, start=1):
-        b = dict(block)
-        b["term_detail"] = i
-        out.append(b)
-    return out
+    return {f"term_detail_{i}": dict(block) for i, block in enumerate(blocks, start=1)}
 
 
 def normalize_terms(value):
@@ -78,14 +73,14 @@ def normalize_terms(value):
 
     Accepts: None -> []; a plain string -> one `conditions` block; a list of
     {label, text} objects -> blocks keyed on label; already-block-list -> as-is.
-    Every returned block is stamped with a 1-based `term_detail` position.
-    Migration shim so consumers and tests have one entry point regardless of
-    which site produced the data.
+    Returns an object keyed by term_detail_N; each value is {section_title,
+    content, type}. Migration shim so consumers and tests have one entry point
+    regardless of which site produced the data.
     """
     if value is None:
-        return []
+        return {}
     if isinstance(value, str):
-        return number_blocks([content_block(None, value, "conditions")]) if value else []
+        return number_blocks([content_block(None, value, "conditions")]) if value else {}
     if isinstance(value, list):
         blocks = []
         for item in value:
@@ -101,7 +96,7 @@ def normalize_terms(value):
                 )
                 blocks.append(content_block(label, item.get("text"), block_type))
         return number_blocks(blocks)
-    return []
+    return {}
 
 
 def _ensure_output_dir(path):
@@ -126,11 +121,15 @@ def save_csv(promos, path):
         writer.writeheader()
         for p in promos:
             row = dict(p)
-            # Serialize list-valued columns (e.g. category_slugs, terms) as
-            # semicolon-joined strings; CSV has no list type. For the `terms`
-            # content-block list, join just each block's content.
+            # Serialize list/dict-valued columns (category_slugs, terms) as
+            # semicolon-joined strings; CSV has no list/object type. For the
+            # `terms` content-block object (keyed term_detail_N), join just each
+            # block's content.
             for k, v in row.items():
-                if isinstance(v, list):
+                if isinstance(v, dict):
+                    parts = [b.get("content", b.get("text", "")) for b in v.values() if isinstance(b, dict)]
+                    row[k] = ";".join(str(x) for x in parts if x)
+                elif isinstance(v, list):
                     parts = []
                     for x in v:
                         if isinstance(x, dict):

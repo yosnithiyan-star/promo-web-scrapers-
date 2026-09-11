@@ -104,7 +104,7 @@ class TestBuildPromo:
         assert p["image"].startswith("https://www.aeon.co.th/contentAsset/")
         assert p["id"].startswith(f"{SITE_CODE}_")
         # Stage-1 card body is a short_detail block (present even without --details).
-        assert p["terms"] and p["terms"][0]["type"] == "short_detail"
+        assert p["terms"] and p["terms"]["term_detail_1"]["type"] == "short_detail"
 
     def test_range_with_year_backfill(self, soup_packages):
         p = self._build(soup_packages["lazada-september-2026"], "credit-card")
@@ -133,18 +133,18 @@ class TestBuildPromo:
         promos = AeonPromotionScraper().scrape_promotions(BASE_URL, fetch_details=True)
         assert len(promos) == 3
         for p in promos:
-            assert p["terms"][0]["type"] == "short_detail"
-            assert p["terms"][1]["type"] == "conditions"
-            assert p["terms"][1]["content"] == "DETAIL " + p["link"]
+            assert p["terms"]["term_detail_1"]["type"] == "short_detail"
+            assert p["terms"]["term_detail_2"]["type"] == "conditions"
+            assert p["terms"]["term_detail_2"]["content"] == "DETAIL " + p["link"]
         assert "terms_items" not in promos[0]
         assert "card_body" not in promos[0]
 
     def test_no_details_leaves_only_short_detail(self, soup_packages):
         p = self._build(soup_packages["insurance-big-care-counter"], "insurance", details=False)
         # Without --details only the stage-1 short_detail block is present.
-        assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "type": "short_detail", "content": "ระยะเวลา : 1 เมษายน 2568 เป็นต้นไป สถานที่ : สาขาอิออนและบิ๊กแคร์เคาน์เตอร์", "term_detail": 1}
-        ]
+        assert p["terms"] == {
+            "term_detail_1": {"section_title": "สรุปย่อ", "type": "short_detail", "content": "ระยะเวลา : 1 เมษายน 2568 เป็นต้นไป สถานที่ : สาขาอิออนและบิ๊กแคร์เคาน์เตอร์"}
+        }
 
 
 # Detail page HTML: full terms live in div.newDetails (real AEON structure).

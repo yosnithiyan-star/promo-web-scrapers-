@@ -173,7 +173,7 @@ class _FakeResp:
 class TestFetchTerms:
     def test_extracts_terms(self, monkeypatch):
         monkeypatch.setattr(
-            "aeon.aeon_promo_scraper.requests.get",
+            "aeon.aeon_promo_scraper.session_get",
             lambda *a, **k: _FakeResp(DETAIL_HTML),
         )
         terms = fetch_terms("https://www.aeon.co.th/aeon/promotions/x")
@@ -183,7 +183,7 @@ class TestFetchTerms:
 
     def test_missing_container_returns_none(self, monkeypatch):
         monkeypatch.setattr(
-            "aeon.aeon_promo_scraper.requests.get",
+            "aeon.aeon_promo_scraper.session_get",
             lambda *a, **k: _FakeResp("<html><body>no details</body></html>"),
         )
         assert fetch_terms("https://www.aeon.co.th/aeon/promotions/x") is None
@@ -194,7 +194,7 @@ class TestFetchTerms:
         def boom(*a, **k):
             raise requests.ConnectionError("down")
 
-        monkeypatch.setattr("aeon.aeon_promo_scraper.requests.get", boom)
+        monkeypatch.setattr("aeon.aeon_promo_scraper.session_get", boom)
         assert fetch_terms("https://www.aeon.co.th/aeon/promotions/x") is None
 
     def test_empty_link_returns_none(self):

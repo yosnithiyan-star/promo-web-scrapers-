@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-from .common import HEADERS, PROXIES, format_thai_dt_str
+from .common import session_get
 
 MAX_REDIRECT_HOPS = 5
 DETAIL_REQUEST_DELAY = 0.3
@@ -45,7 +45,7 @@ def fetch_promo_detail(url: str):
     request fails or the page doesn't have that information.
     """
     try:
-        resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=20)
+        resp = session_get(url, timeout=20)
         resp.raise_for_status()
     except requests.RequestException:
         return None, None, None
@@ -72,7 +72,7 @@ def fetch_promo_detail(url: str):
         current_url = urljoin(current_url, redirect_target)
         time.sleep(DETAIL_REQUEST_DELAY)
         try:
-            redirect_resp = requests.get(current_url, headers=HEADERS, proxies=PROXIES, timeout=20)
+            redirect_resp = session_get(current_url, timeout=20)
             redirect_resp.raise_for_status()
         except requests.RequestException:
             break

@@ -64,7 +64,7 @@ from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.base import PromotionScraper
-from shared.common import HEADERS, PROXIES, fetch_html as _fetch_html
+from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_thai_date_range_full
 from shared.detail_fetcher import clean_terms_text
 from shared.output import SITE_CODES, make_site_id
@@ -130,7 +130,7 @@ def fetch_terms(link: str) -> str | None:
     if not link:
         return None
     try:
-        resp = requests.get(link, headers=HEADERS, proxies=PROXIES, timeout=20)
+        resp = session_get(link, timeout=20)
         resp.raise_for_status()
     except requests.RequestException:
         return None

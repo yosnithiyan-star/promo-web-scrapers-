@@ -23,6 +23,17 @@ PROXIES = (
     else None
 )
 
+# One shared session reuses pooled connections across all scrapers, keeping a
+# stable IP (session-promo_scrapers) while cutting per-request handshakes.
+_SESSION = requests.Session()
+_SESSION.headers.update(HEADERS)
+_SESSION.proxies = PROXIES if PROXIES else {}
+
+
+def session_get(url: str, timeout: int = 20):
+    """GET via the shared session, honouring the per-request timeout."""
+    return _SESSION.get(url, timeout=timeout)
+
 
 def format_thai_dt(dt: datetime) -> str:
     """Format a datetime as 'YYYY-MM-DD HH:MM:SS' in GMT+7 (Thailand time)."""
@@ -38,8 +49,8 @@ def format_thai_dt_str(iso_str):
 
 
 def fetch_html(url: str, timeout: int = 20) -> str:
-    """GET a page (with shared HEADERS/PROXIES) and return decoded HTML."""
-    resp = requests.get(url, headers=HEADERS, proxies=PROXIES, timeout=timeout)
+    """GET a page (via the shared session) and return decoded HTML."""
+    resp = session_get(url, timeout=timeout)
     resp.raise_for_status()
     resp.encoding = resp.apparent_encoding
     return resp.text

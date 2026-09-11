@@ -56,8 +56,13 @@ class PromotionScraper(ABC):
         it None. Return None to skip the item (filtering happens here).
         """
 
-    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False) -> list[dict]:
+    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None) -> list[dict]:
         """Fetch, extract, dedup, and return the list of promo dicts.
+
+        `data` optionally carries an already-fetched/parsed page so callers that
+        need the raw items before the build loop (e.g. to prefetch detail pages
+        in parallel) don't force a second fetch of the listing page. When omitted
+        the page is fetched here as usual.
 
         Duplicates are judged in two ways: intra-run by the namespaced `id`
         (silently the run's own repeats are skipped, matching prior behavior)
@@ -66,7 +71,7 @@ class PromotionScraper(ABC):
         the promo is still emitted but flagged on stderr instead of dropped.
         """
         url = url or self.DEFAULT_URL
-        data = self.fetch_data(url)
+        data = data if data is not None else self.fetch_data(url)
         scraped_dt = datetime.now(THAILAND_TZ)
         scraped_at = format_thai_dt(scraped_dt)
         today = scraped_dt.date()

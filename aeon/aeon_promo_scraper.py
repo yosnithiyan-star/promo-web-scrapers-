@@ -56,7 +56,7 @@ Notes:
 import os
 import re
 import sys
-import time
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin
 
 import requests
@@ -91,12 +91,18 @@ PERIOD_LABEL = "ระยะเวลา"
 # Full terms live on each promo's own detail page (div.newDetails), not on the
 # listing card. Fetching them therefore costs one extra request per promo.
 DETAIL_TERMS_SELECTOR = "div.newDetails"
-DETAIL_REQUEST_DELAY = 0.3
+DETAIL_CONCURRENCY = 8
 
 
 def fetch_html(url: str) -> str:
     # AEON's pages are larger/slower than the other sites, so allow a longer timeout.
     return _fetch_html(url, timeout=30)
+
+
+def promo_link(package) -> str:
+    """Build a promo's absolute detail URL, or '' when the card has no link."""
+    href = package.get("href", "")
+    return urljoin(DEFAULT_URL, href) if href else ""
 
 
 def build_form_category_map(html: str) -> dict:
@@ -164,6 +170,11 @@ class AeonPromotionScraper(PromotionScraper):
     DEFAULT_URL = DEFAULT_URL
     OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+    def __init__(self):
+        # Cache of detail-page terms keyed by promo link, populated by
+        # scrape_promotions when --details is on.
+        self._detail_terms = None
+
     def fetch_data(self, url: str) -> str:
         return fetch_html(url)
 
@@ -178,6 +189,33 @@ class AeonPromotionScraper(PromotionScraper):
             for package in form.select("a.package"):
                 yield {"package": package, "slug": slug}
 
+    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None) -> list[dict]:
+        """Fetch all promos' detail terms in parallel when --details is on.
+
+        The base class builds promos one at a time, which would fetch each detail
+        page serially. We instead prefetch every detail page concurrently (bounded
+        by DETAIL_CONCURRENCY, order-preserving), cache the terms by link, then let
+        the base loop read from that cache. The listing page is fetched once here
+        and handed to the base so it is not fetched a second time.
+        """
+        if not fetch_details:
+            return super().scrape_promotions(url, fetch_details, data)
+
+        url = url or self.DEFAULT_URL
+        data = data if data is not None else self.fetch_data(url)
+        links = [promo_link(item["package"]) for item in self.iter_raw_items(data)]
+        self._detail_terms = self._prefetch_detail_terms([l for l in links if l])
+        return super().scrape_promotions(url, fetch_details, data)
+
+    @staticmethod
+    def _prefetch_detail_terms(links: list[str]) -> dict:
+        """Fetch each promo's detail-page terms concurrently, preserving link order."""
+        if not links:
+            return {}
+        with ThreadPoolExecutor(max_workers=DETAIL_CONCURRENCY) as pool:
+            terms = list(pool.map(fetch_terms, links))
+        return {link: term for link, term in zip(links, terms)}
+
     def build_promo(self, item: dict, today, fetch_details: bool = False) -> dict:
         """Map one <a class="package"> card to the standard promo schema."""
         package = item["package"]
@@ -187,8 +225,7 @@ class AeonPromotionScraper(PromotionScraper):
         heading_el = package.select_one(".package__content-heading")
         title = heading_el.get_text(" ", strip=True) if heading_el else ""
 
-        href = package.get("href", "")
-        link = urljoin(base_url, href) if href else ""
+        link = promo_link(package)
 
         img = package.find("img")
         image = None
@@ -202,9 +239,10 @@ class AeonPromotionScraper(PromotionScraper):
         detail_terms = None
         if fetch_details:
             # Full terms come from the detail page (div.newDetails); AEON exposes no
-            # publish/modify timestamps. One extra request per promo.
-            detail_terms = fetch_terms(link)
-            time.sleep(DETAIL_REQUEST_DELAY)
+            # publish/modify timestamps. The base class prefetches all promos'
+            # detail pages in parallel (see scrape_promotions) and caches them by
+            # link; build_promo just reads its own from that cache.
+            detail_terms = (self._detail_terms or {}).get(link)
 
         # terms joins the listing-card body and the detail-page content into a
         # single list, each entry labelled by its source.

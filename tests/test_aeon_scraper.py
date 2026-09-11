@@ -118,22 +118,25 @@ class TestBuildPromo:
         assert p["date_end"] is None
         assert p["date_range"] == "ตั้งแต่วันนี้จนกว่าสินค้าจะหมด"
 
-    def test_details_fetches_terms(self, soup_packages, monkeypatch):
-        # build_promo delegates to fetch_terms(link) when details=True. terms
-        # joins card body + detail as {label, text} objects.
+    def test_details_fetches_terms(self, monkeypatch):
+        # --details prefetches each promo's detail page in parallel (via
+        # scrape_promotions -> _prefetch_detail_terms -> fetch_terms), caches by
+        # link, then build_promo joins card body + detail as {label, text}.
+        monkeypatch.setattr(
+            "aeon.aeon_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
         monkeypatch.setattr(
             "aeon.aeon_promo_scraper.fetch_terms",
             lambda link: "DETAIL " + link,
         )
-        monkeypatch.setattr("aeon.aeon_promo_scraper.time.sleep", lambda s: None)
-        p = self._build(soup_packages["insurance-big-care-counter"], "insurance", details=True)
-        # terms = [{card}, {detail}]
-        assert p["terms"][0]["label"] == "card"
-        assert "สาขาอิออนและบิ๊กแคร์เคาน์เตอร์" in p["terms"][0]["text"]
-        assert p["terms"][1]["label"] == "detail"
-        assert p["terms"][1]["text"] == "DETAIL " + BASE_URL + "insurance-big-care-counter"
-        assert "terms_items" not in p
-        assert "card_body" not in p
+        promos = AeonPromotionScraper().scrape_promotions(BASE_URL, fetch_details=True)
+        assert len(promos) == 3
+        for p in promos:
+            assert p["terms"][0]["label"] == "card"
+            assert p["terms"][1]["label"] == "detail"
+            assert p["terms"][1]["text"] == "DETAIL " + p["link"]
+        assert "terms_items" not in promos[0]
+        assert "card_body" not in promos[0]
 
     def test_no_details_leaves_terms_none(self, soup_packages):
         p = self._build(soup_packages["insurance-big-care-counter"], "insurance", details=False)
@@ -218,6 +221,24 @@ class TestScrapePromotions:
         promos = AeonPromotionScraper().scrape_promotions(BASE_URL)
         ids = [p["id"] for p in promos]
         assert len(ids) == len(set(ids))
+
+    def test_details_fetches_listing_once(self, monkeypatch):
+        # --details must fetch the listing page once, not twice (the prefetch
+        # hands its fetched data to the base loop). fetch_terms covers the
+        # detail requests.
+        calls = []
+
+        def fake_fetch(url):
+            calls.append(url)
+            return SAMPLE_HTML
+
+        monkeypatch.setattr("aeon.aeon_promo_scraper.fetch_html", fake_fetch)
+        monkeypatch.setattr(
+            "aeon.aeon_promo_scraper.fetch_terms", lambda link: "DETAIL " + link
+        )
+        promos = AeonPromotionScraper().scrape_promotions(BASE_URL, fetch_details=True)
+        assert len(promos) == 3
+        assert len(calls) == 1, f"listing page fetched {len(calls)} times, expected 1"
 
     def test_all_categories_known(self):
         # every slug used by the map has a Thai display name

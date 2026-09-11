@@ -50,11 +50,27 @@ def content_block(section_title: str | None, content: str | None, block_type: st
 
     `content` is the caller's clean single-line text (use clean_terms_text
     first). `block_type` must be in BLOCK_TYPES. Returns a dict; content may be
-    None for a block that carries no text.
+    None for a block that carries no text. The `term_detail` field is stamped by
+    number_blocks(), not here.
     """
     if block_type not in BLOCK_TYPES:
         raise ValueError(f"unknown block type: {block_type!r} (allowed: {BLOCK_TYPES})")
     return {"section_title": section_title, "content": content, "type": block_type}
+
+
+def number_blocks(blocks: list[dict]) -> list[dict]:
+    """Stamp each block with its 1-based `term_detail` position.
+
+    Gives every block a stable numbered label (term_detail_1, term_detail_2, ...)
+    so consumers can address sections positionally regardless of type. Blocks are
+    copied, not mutated, so callers keep their own lists intact.
+    """
+    out = []
+    for i, block in enumerate(blocks, start=1):
+        b = dict(block)
+        b["term_detail"] = i
+        out.append(b)
+    return out
 
 
 def normalize_terms(value):
@@ -62,13 +78,14 @@ def normalize_terms(value):
 
     Accepts: None -> []; a plain string -> one `conditions` block; a list of
     {label, text} objects -> blocks keyed on label; already-block-list -> as-is.
+    Every returned block is stamped with a 1-based `term_detail` position.
     Migration shim so consumers and tests have one entry point regardless of
     which site produced the data.
     """
     if value is None:
         return []
     if isinstance(value, str):
-        return [content_block(None, value, "conditions")] if value else []
+        return number_blocks([content_block(None, value, "conditions")]) if value else []
     if isinstance(value, list):
         blocks = []
         for item in value:
@@ -83,7 +100,7 @@ def normalize_terms(value):
                     label if label in BLOCK_TYPES else "conditions"
                 )
                 blocks.append(content_block(label, item.get("text"), block_type))
-        return blocks
+        return number_blocks(blocks)
     return []
 
 

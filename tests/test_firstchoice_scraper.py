@@ -59,14 +59,14 @@ DETAIL_HTML = """
   <section class="promotionDetailConditionSection navDetect">
     <h1>เงื่อนไขรายการส่งเสริมการขาย</h1>
     <p>รายการส่งเสริมการขายนี้สำหรับลูกค้าบัตรเฟิร์สช้อยส์เท่านั้น</p>
+    <div class="promotionDetailContentSection">
+      <table>
+        <tr><th>ยอดใช้จ่าย</th><th>อัตราเงินคืน</th></tr>
+        <tr><td>10,000 บาท</td><td>3%</td></tr>
+        <tr><td>50,000 บาท</td><td>5%</td></tr>
+      </table>
+    </div>
   </section>
-  <div class="promotionDetailContentSection">
-    <table>
-      <tr><th>ยอดใช้จ่าย</th><th>อัตราเงินคืน</th></tr>
-      <tr><td>10,000 บาท</td><td>3%</td></tr>
-      <tr><td>50,000 บาท</td><td>5%</td></tr>
-    </table>
-  </div>
 </body></html>
 """
 
@@ -128,7 +128,7 @@ class TestBuildPromo:
         assert p["modified_at"] is None
         # Stage-1 short detail from the card subtitle is a short_detail block.
         assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"}
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1}
         ]
 
     def test_open_ended_date_end_is_none(self, scraper, promos):
@@ -145,44 +145,46 @@ class TestBuildPromo:
         card = soup.find("div", class_="promotionContentBox")
         p = self._build(scraper, {"card": card})
         assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"}
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1}
         ]
 
-    def test_details_appends_conditions_block(self, scraper, monkeypatch):
+    def test_details_appends_section_blocks(self, scraper, monkeypatch):
         monkeypatch.setattr(
             "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
         )
         monkeypatch.setattr(
             "firstchoice.firstchoice_promo_scraper.fetch_detail",
-            lambda link: ("DETAIL " + link, []),
+            lambda link: [{"section_title": "เงื่อนไข", "text": "DETAIL " + link}],
         )
         promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
         p = promos[0]
         assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
-            {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions"},
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1},
+            {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions", "term_detail": 2},
         ]
 
-    def test_details_emits_reward_tiers_blocks(self, scraper, monkeypatch):
+    def test_details_sections_numbered_in_order(self, scraper, monkeypatch):
         monkeypatch.setattr(
             "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
         )
         monkeypatch.setattr(
             "firstchoice.firstchoice_promo_scraper.fetch_detail",
-            lambda link: ("DETAIL " + link, ["ยอดใช้จ่าย | 3%", "ยอดใช้จ่าย | 5%"]),
+            lambda link: [
+                {"section_title": "ครั้งที่ 1", "text": "ยอดใช้จ่าย | 3%"},
+                {"section_title": "ครั้งที่ 2", "text": "ยอดใช้จ่าย | 5%"},
+            ],
         )
         promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
         p = promos[0]
         assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
-            {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions"},
-            {"section_title": "ตารางรางวัล 1", "content": "ยอดใช้จ่าย | 3%", "type": "reward_tiers"},
-            {"section_title": "ตารางรางวัล 2", "content": "ยอดใช้จ่าย | 5%", "type": "reward_tiers"},
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail", "term_detail": 1},
+            {"section_title": "ครั้งที่ 1", "content": "ยอดใช้จ่าย | 3%", "type": "conditions", "term_detail": 2},
+            {"section_title": "ครั้งที่ 2", "content": "ยอดใช้จ่าย | 5%", "type": "conditions", "term_detail": 3},
         ]
 
 
 class TestFetchDetail:
-    def test_returns_cleaned_conditions_and_reward_tables(self, monkeypatch):
+    def test_splits_detail_into_section_blocks(self, monkeypatch):
         class FakeResp:
             text = DETAIL_HTML
             apparent_encoding = "utf-8"
@@ -194,18 +196,22 @@ class TestFetchDetail:
             "firstchoice.firstchoice_promo_scraper.session_get",
             lambda url, timeout: FakeResp(),
         )
-        conditions, tables = fetch_detail("https://www.firstchoice.co.th/promotion/x")
-        assert conditions is not None
-        assert "เงื่อนไขรายการส่งเสริมการขาย" in conditions
-        assert "ลูกค้าบัตรเฟิร์สช้อยส์" in conditions
-        assert tables == ["ยอดใช้จ่าย | อัตราเงินคืน 10,000 บาท | 3% 50,000 บาท | 5%"]
+        sections = fetch_detail("https://www.firstchoice.co.th/promotion/x")
+        assert isinstance(sections, list)
+        assert len(sections) == 1
+        s = sections[0]
+        assert s["section_title"] == "เงื่อนไขรายการส่งเสริมการขาย"
+        assert "ลูกค้าบัตรเฟิร์สช้อยส์" in s["text"]
+        # The reward table is flattened into the same section.
+        assert "ยอดใช้จ่าย | อัตราเงินคืน" in s["text"]
+        assert "10,000 บาท | 3%" in s["text"]
 
-    def test_empty_tables_when_no_link(self, monkeypatch):
-        assert fetch_detail("") == (None, [])
+    def test_empty_when_no_link(self, monkeypatch):
+        assert fetch_detail("") == []
 
-    def test_empty_tables_on_request_error(self, monkeypatch):
+    def test_empty_on_request_error(self, monkeypatch):
         def boom(url, timeout):
             raise RuntimeError("network down")
 
         monkeypatch.setattr("firstchoice.firstchoice_promo_scraper.session_get", boom)
-        assert fetch_detail("https://www.firstchoice.co.th/promotion/x") == (None, [])
+        assert fetch_detail("https://www.firstchoice.co.th/promotion/x") == []

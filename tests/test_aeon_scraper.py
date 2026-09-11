@@ -143,7 +143,7 @@ class TestBuildPromo:
         p = self._build(soup_packages["insurance-big-care-counter"], "insurance", details=False)
         # Without --details only the stage-1 short_detail block is present.
         assert p["terms"] == [
-            {"section_title": "สรุปย่อ", "type": "short_detail", "content": "ระยะเวลา : 1 เมษายน 2568 เป็นต้นไป สถานที่ : สาขาอิออนและบิ๊กแคร์เคาน์เตอร์"}
+            {"section_title": "สรุปย่อ", "type": "short_detail", "content": "ระยะเวลา : 1 เมษายน 2568 เป็นต้นไป สถานที่ : สาขาอิออนและบิ๊กแคร์เคาน์เตอร์", "term_detail": 1}
         ]
 
 

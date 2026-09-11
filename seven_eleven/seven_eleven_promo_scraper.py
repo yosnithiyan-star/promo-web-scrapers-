@@ -64,7 +64,7 @@ from shared.base import PromotionScraper
 from shared.common import THAILAND_TZ, fetch_html, format_thai_dt_str
 from shared.date_parser import parse_date_range
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, content_block, make_site_id
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
 
 DEFAULT_URL = "https://www.7eleven.co.th/promotion"
 SITE_NAME = "seven_eleven"
@@ -209,7 +209,7 @@ class SevenElevenPromotionScraper(PromotionScraper):
             # terms is a uniform block list; the string terms -> a conditions block.
             terms_text = extract_text_from_html(detail_th) if detail_th else None
             if terms_text:
-                promo["terms"] = [content_block("เงื่อนไข", terms_text, "conditions")]
+                promo["terms"] = number_blocks([content_block("เงื่อนไข", terms_text, "conditions")])
 
         return promo
 

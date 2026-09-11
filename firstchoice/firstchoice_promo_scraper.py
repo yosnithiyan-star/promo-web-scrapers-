@@ -65,7 +65,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_date_range
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, content_block, make_site_id
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
 
 DEFAULT_URL = "https://www.firstchoice.co.th/promotion"
 SITE_NAME = "firstchoice"
@@ -96,46 +96,89 @@ def extract_image(card) -> str | None:
     return None
 
 
-def fetch_detail(link: str) -> tuple[str | None, list[str]]:
-    """Fetch a promo's detail page once and return (conditions, reward_tables).
+def _flatten_table(table) -> str:
+    """Flatten one <table> to "header | cell | ..." row text."""
+    rows = []
+    for tr in table.find_all("tr"):
+        cells = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
+        cells = [c for c in cells if c]
+        if cells:
+            rows.append(" | ".join(cells))
+    return clean_terms_text("\n".join(rows)) or ""
 
-    One HTTP request per promo (not one for terms and another for tables).
-    Returns (None, []) if the request fails or the page has no detail content.
 
-    conditions     — the full conditions prose (เงื่อนไขรายการส่งเสริมการขาย)
-                     from div.promotionDetailConditionSection. First Choice's
-                     "แสดงเนื้อหา" (see more) is a CSS clip on the same wrapper,
-                     whose full text is already in the DOM — no browser needed.
-    reward_tables  — each reward/benefit <table> (e.g. spend tiers -> cashback
-                     rates) flattened to "header | cell | ..." blocks, one per
-                     table, in DOM order. Empty list if none present.
+def _split_detail_sections(container) -> list[dict]:
+    """Split the detail container's body at its h2/h3 headings.
+
+    First Choice renders the whole conditions prose inside one wrapper
+    (wrapperPageRMMobileB) with no <section> boundaries — the natural sections
+    are delimited by the h2/h3 headings (each heading + its following prose/
+    table is one section). Returns [{section_title, text}] in DOM order. A
+    section's text flattens its headings, paragraphs, lists, and any table so
+    each numbered block carries its full content.
+    """
+    if container is None:
+        return []
+    sections: list[dict] = []
+    current_title = None
+    current_parts: list[str] = []
+
+    def flush():
+        nonlocal current_title, current_parts
+        text = clean_terms_text(" ".join(current_parts)) if current_parts else None
+        if current_title is not None or text:
+            sections.append({"section_title": current_title, "text": text})
+        current_title = None
+        current_parts = []
+
+    for el in container.find_all(["h1", "h2", "h3", "h4", "p", "ul", "ol", "div"]):
+        if el.name in ("h1", "h2", "h3", "h4"):
+            heading = el.get_text(" ", strip=True)
+            # Skip the leading page title heading (not a real section).
+            if current_title is None and not current_parts and not sections and heading:
+                current_title = heading
+                continue
+            flush()
+            current_title = heading or current_title
+            continue
+        # table may be nested inside a div wrapper
+        if el.name == "div":
+            table = el.find("table")
+            if table:
+                current_parts.append(_flatten_table(table))
+            continue
+        if el.name in ("p", "ul", "ol"):
+            text = el.get_text(" ", strip=True)
+            if text:
+                current_parts.append(text)
+    flush()
+    # Drop an empty title-only lead section.
+    return [s for s in sections if s.get("text")]
+
+
+def fetch_detail(link: str) -> list[dict]:
+    """Fetch a promo's detail page once and return its sections.
+
+    One HTTP request per promo. Returns [] if the request fails or the page has
+    no detail content.
+
+    Returns the detail page's conditions split at its h2/h3 headings into
+    [{section_title, text}] blocks, in DOM order. Each block flattens its prose
+    and any reward <table>. First Choice's "แสดงเนื้อหา" (see more) is a CSS clip
+    on the same wrapper, so the full text is already in the DOM.
     First Choice exposes no publish/modify meta.
     """
     if not link:
-        return None, []
+        return []
     try:
         resp = session_get(link, timeout=20)
         resp.raise_for_status()
     except Exception:
-        return None, []
+        return []
     resp.encoding = resp.apparent_encoding
     soup = BeautifulSoup(resp.text, "lxml")
-
     container = soup.select_one(DETAIL_TERMS_SELECTOR)
-    conditions = clean_terms_text(container.get_text(" ", strip=True)) if container else None
-
-    tables = []
-    for table in soup.find_all("table"):
-        rows = []
-        for tr in table.find_all("tr"):
-            cells = [c.get_text(" ", strip=True) for c in tr.find_all(["td", "th"])]
-            cells = [c for c in cells if c]
-            if cells:
-                rows.append(" | ".join(cells))
-        if rows:
-            tables.append(clean_terms_text("\n".join(rows)) or "")
-
-    return conditions, [t for t in tables if t]
+    return _split_detail_sections(container)
 
 
 class FirstChoicePromotionScraper(PromotionScraper):
@@ -177,12 +220,12 @@ class FirstChoicePromotionScraper(PromotionScraper):
 
     @staticmethod
     def _prefetch_detail(links: list[str]) -> dict:
-        """Fetch each promo's detail-page (terms + tables) concurrently, order-preserving."""
+        """Fetch each promo's detail-page sections concurrently, order-preserving."""
         if not links:
             return {}
         with ThreadPoolExecutor(max_workers=DETAIL_CONCURRENCY) as pool:
             details = list(pool.map(fetch_detail, links))
-        return {link: (cond, tabs) for link, (cond, tabs) in zip(links, details)}
+        return {link: sections for link, sections in zip(links, details)}
 
     def build_promo(self, item: dict, today, fetch_details: bool = False) -> dict:
         """Map one promo card to the standard promo schema."""
@@ -203,16 +246,20 @@ class FirstChoicePromotionScraper(PromotionScraper):
         short_el = card.select_one("p.pPromoCutText")
         short_detail = clean_terms_text(short_el.get_text(" ", strip=True)) if short_el else None
 
-        # terms is a uniform block list (see shared.output.content_block).
+        # terms is a uniform block list (see shared.output.content_block),
+        # each block stamped with a 1-based term_detail position. The stage-1
+        # short_detail block comes first (term_detail_1); the detail page's
+        # sections follow, numbered in DOM order.
         terms = []
         if short_detail:
             terms.append(content_block("สรุปย่อ", short_detail, "short_detail"))
         if fetch_details:
-            conditions, reward_tables = (self._detail or {}).get(link, (None, []))
-            if conditions:
-                terms.append(content_block("เงื่อนไข", conditions, "conditions"))
-            for i, table_text in enumerate(reward_tables, start=1):
-                terms.append(content_block(f"ตารางรางวัล {i}", table_text, "reward_tiers"))
+            for section in (self._detail or {}).get(link, []):
+                title = section.get("section_title")
+                text = section.get("text")
+                if text:
+                    terms.append(content_block(title, text, "conditions"))
+        terms = number_blocks(terms)
 
         return {
             "id": make_site_id(SITE_CODE, None, link),

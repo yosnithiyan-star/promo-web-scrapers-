@@ -67,7 +67,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_thai_date_range_full
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, content_block, make_site_id
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
 
 DEFAULT_URL = "https://www.aeon.co.th/aeon/promotions/"
 SITE_NAME = "aeon"
@@ -247,6 +247,7 @@ class AeonPromotionScraper(PromotionScraper):
             detail_terms = (self._detail_terms or {}).get(link)
             if detail_terms:
                 terms.append(content_block("ข้อกำหนดและเงื่อนไข", detail_terms, "conditions"))
+        terms = number_blocks(terms)
 
         return {
             "id": make_site_id(SITE_CODE, None, link),

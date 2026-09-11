@@ -64,7 +64,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html
 from shared.date_parser import parse_date_range, DATE_RANGE_RE
 from shared.detail_fetcher import fetch_promo_detail, DETAIL_REQUEST_DELAY
-from shared.output import SITE_CODES, content_block, make_site_id
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
 
 DEFAULT_URL = "https://www.truemoney.com/promotion"
 SITE_NAME = "truemoney"
@@ -204,7 +204,7 @@ class TrueMoneyPromotionScraper(PromotionScraper):
             promo["modified_at"] = modified_at
             # terms is a uniform block list; the string terms -> a conditions block.
             if terms:
-                promo["terms"] = [content_block("เงื่อนไข", terms, "conditions")]
+                promo["terms"] = number_blocks([content_block("เงื่อนไข", terms, "conditions")])
             time.sleep(DETAIL_REQUEST_DELAY)
         return promo
 

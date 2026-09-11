@@ -153,7 +153,7 @@ class TestBuildPromo:
         }
         promo = _build(item, "test", "Test Category", True)
 
-        assert promo["terms"] == [{"section_title": "เงื่อนไข", "content": "Full terms and conditions", "type": "conditions"}]
+        assert promo["terms"] == [{"section_title": "เงื่อนไข", "content": "Full terms and conditions", "type": "conditions", "term_detail": 1}]
         assert promo["published_at"] is not None
         assert promo["modified_at"] is not None
         assert "2026-08-23" in promo["published_at"]

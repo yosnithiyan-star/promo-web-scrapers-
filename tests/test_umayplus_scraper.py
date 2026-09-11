@@ -116,7 +116,7 @@ class TestBuildPromo:
         promos = self._scrape(fetch_details=True)
         assert len(promos) == 2
         for p in promos:
-            assert p["terms"] == [{"section_title": "เงื่อนไข", "content": "TERMS " + p["post_id"], "type": "conditions"}]
+            assert p["terms"] == [{"section_title": "เงื่อนไข", "content": "TERMS " + p["post_id"], "type": "conditions", "term_detail": 1}]
             assert p["published_at"] is None
             assert p["modified_at"] is None
 

@@ -10,6 +10,7 @@ from shared.output import (
     make_site_id,
     content_block,
     normalize_terms,
+    number_blocks,
     BLOCK_TYPES,
 )
 from shared.detail_fetcher import clean_terms_text
@@ -60,7 +61,7 @@ class TestNormalizeTerms:
 
     def test_string_to_conditions_block(self):
         assert normalize_terms("สแกน") == [
-            {"section_title": None, "content": "สแกน", "type": "conditions"}
+            {"section_title": None, "content": "สแกน", "type": "conditions", "term_detail": 1}
         ]
 
     def test_empty_string_to_empty(self):
@@ -69,18 +70,37 @@ class TestNormalizeTerms:
     def test_legacy_label_text_to_blocks(self):
         out = normalize_terms([{"label": "detail", "text": "a"}, {"label": "tables", "text": "b"}])
         assert out == [
-            {"section_title": "detail", "content": "a", "type": "conditions"},
-            {"section_title": "tables", "content": "b", "type": "reward_tiers"},
+            {"section_title": "detail", "content": "a", "type": "conditions", "term_detail": 1},
+            {"section_title": "tables", "content": "b", "type": "reward_tiers", "term_detail": 2},
         ]
 
-    def test_already_blocks_passed_through(self):
+    def test_already_blocks_get_stamped(self):
         blocks = [content_block(None, "a", "conditions")]
-        assert normalize_terms(blocks) == blocks
+        out = normalize_terms(blocks)
+        assert out == [
+            {"section_title": None, "content": "a", "type": "conditions", "term_detail": 1}
+        ]
 
     def test_non_dict_items_skipped(self):
         assert normalize_terms(["nope", {"label": "detail", "text": "ok"}]) == [
-            {"section_title": "detail", "content": "ok", "type": "conditions"}
+            {"section_title": "detail", "content": "ok", "type": "conditions", "term_detail": 1}
         ]
+
+
+class TestNumberBlocks:
+    def test_stamps_sequential_term_detail(self):
+        blocks = [
+            content_block("a", "x", "short_detail"),
+            content_block("b", "y", "conditions"),
+        ]
+        out = number_blocks(blocks)
+        assert [b["term_detail"] for b in out] == [1, 2]
+        assert [b["type"] for b in out] == ["short_detail", "conditions"]
+
+    def test_does_not_mutate_input(self):
+        blocks = [content_block(None, "x", "conditions")]
+        number_blocks(blocks)
+        assert "term_detail" not in blocks[0]
 
 
 class TestCleanTermsText:

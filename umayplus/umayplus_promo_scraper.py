@@ -58,7 +58,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_gregorian_date_range
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, content_block, make_site_id
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
 
 DEFAULT_URL = "https://www.umayplus.com/promotion"
 SITE_NAME = "umayplus"
@@ -192,6 +192,7 @@ class UmayplusPromotionScraper(PromotionScraper):
         terms = []
         if detail_terms:
             terms.append(content_block("เงื่อนไข", detail_terms, "conditions"))
+        terms = number_blocks(terms)
 
         return {
             "id": make_site_id(SITE_CODE, cashcard),

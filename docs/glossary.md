@@ -55,10 +55,16 @@ sites use it differently.
   below). Empty list `[]` when a site exposes no detail (or `--details` is off).
   Two legacy shapes (plain string; `{label, text}` list) are coerced to blocks by
   `shared.output.normalize_terms`.
-- **Content block** — one `{section_title, content, type}` element of `terms`.
-  `content` is clean single-line text (`clean_terms_text` output), or `None` if
-  the block carries no text. `type` comes from a stable taxonomy:
-  `short_detail | conditions | reward_tiers | meta` (see **`type` taxonomy**).
+- **Content block** — one `{section_title, content, type, term_detail}` element
+  of `terms`. `content` is clean single-line text (`clean_terms_text` output), or
+  `None` if the block carries no text. `type` comes from a stable taxonomy
+  (`short_detail | conditions | reward_tiers | meta`; see **`type` taxonomy**).
+  `term_detail` is the block's 1-based position in the promo's `terms` list —
+  a stable numbered label (`term_detail_1`, `term_detail_2`, ...) so consumers
+  can address sections positionally regardless of type; stamped by
+  `shared.output.number_blocks`. For sites whose detail prose has heading
+  structure (e.g. FirstChoice), each h2/h3 section becomes its own numbered
+  block. `section_title` is `None` for a section with no preceding heading.
 - **`type` taxonomy** — the allowed content-block types:
   - `short_detail` — stage-1 listing-card short text (e.g. firstchoice `<p>`
     subtitle, AEON card body).
@@ -68,8 +74,9 @@ sites use it differently.
   - `meta` — dates, eligibility, download links, other small structured bits.
   Built via `shared.output.content_block`.
 - **Reward table** — a `<table>` in a site's detail content encoding structured
-  data (e.g. spend tiers → cashback rates). Flattened to `|`-joined rows of text
-  as a `reward_tiers` content block.
+  data (e.g. spend tiers → cashback rates). Flattened to `|`-joined rows of text;
+  in FirstChoice each table is folded into its owning heading-section's numbered
+  block (not a separate reward_tiers block).
 - **Design-time advisor** — `tools/analyze_site.py`; given a site's stage-1 and
   stage-2 HTML, heuristically recommends a selector→`type` mapping and flags
   see-more/CSS-clip wrappers, *before* scraper code is written. Pure DOM

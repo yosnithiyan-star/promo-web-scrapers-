@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-from .common import session_get
+from .common import format_thai_dt_str, session_get
 
 MAX_REDIRECT_HOPS = 5
 DETAIL_REQUEST_DELAY = 0.3

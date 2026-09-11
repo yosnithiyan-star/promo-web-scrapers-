@@ -58,7 +58,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_gregorian_date_range
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, make_site_id
+from shared.output import SITE_CODES, content_block, make_site_id
 
 DEFAULT_URL = "https://www.umayplus.com/promotion"
 SITE_NAME = "umayplus"
@@ -188,9 +188,10 @@ class UmayplusPromotionScraper(PromotionScraper):
             image = urljoin(DEFAULT_URL, img["src"])
 
         detail_terms = (self._detail_terms or {}).get(link) if fetch_details else None
-        terms = [
-            {"label": "detail", "text": detail_terms},
-        ] if fetch_details else None
+        # terms is a uniform block list; the string detail terms -> a conditions block.
+        terms = []
+        if detail_terms:
+            terms.append(content_block("เงื่อนไข", detail_terms, "conditions"))
 
         return {
             "id": make_site_id(SITE_CODE, cashcard),

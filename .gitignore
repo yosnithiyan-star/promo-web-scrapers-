@@ -5,3 +5,6 @@ __pycache__/
 
 # scraped output — dated per run, not tracked in git
 raw/
+
+# temporary review / tooling scratch output
+.scratch/

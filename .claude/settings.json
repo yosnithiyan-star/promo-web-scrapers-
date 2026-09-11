@@ -1,6 +1,20 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "outputStyle": "Concise",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"C:/Users/thsm0378/.claude/hooks/rtk_flag.sh\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
   "skillOverrides": {
     "agent-session-resume": "on",
     "recap": "on",

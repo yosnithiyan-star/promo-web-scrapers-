@@ -1,0 +1,211 @@
+"""Tests for firstchoice/firstchoice_promo_scraper.py — fixture-based, no live network."""
+
+import pytest
+from datetime import date
+
+from firstchoice.firstchoice_promo_scraper import (
+    FirstChoicePromotionScraper,
+    fetch_detail,
+    promo_link,
+    extract_image,
+    SITE_CODE,
+)
+
+BASE_URL = "https://www.firstchoice.co.th/promotion"
+
+# Minimal HTML mirroring the real First Choice page: each promo is a
+# div.promotionContentBox wrapping an <a> link, a <picture><img>, a
+# div.tagPromotion (category), an h2.topicPromoCutText (title), a
+# p.pPromoCutText (subtitle), and a span (date range).
+SAMPLE_HTML = """
+<html><body>
+  <div class="promotionContentBox">
+    <a href="/promotion/bts-world-tour-arirang-in-bangkok">
+      <div class="wrapImgPromotionContentBox">
+        <picture><source/><img src="/getattachment/aaa/thumb.jpg?lang=th-TH&amp;ext=.jpg"/></picture>
+      </div>
+      <div class="wrapTextPromotionContentBox">
+        <div class="tagPromotion">กิจกรรม</div>
+        <h2 class="topicPromoCutText">กรุงศรีร่วมแจม BTS WORLD TOUR 'ARIRANG' IN BANGKOK</h2>
+        <p class="pPromoCutText">ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต</p>
+        <span>1 ส.ค. 69 - 15 พ.ย. 69</span>
+      </div>
+    </a>
+  </div>
+  <div class="promotionContentBox">
+    <a href="/promotion/pay-with-visa-cashback">
+      <div class="wrapImgPromotionContentBox">
+        <picture><source/><img src="/getattachment/bbb/visa.jpg?lang=th-TH&amp;ext=.jpg"/></picture>
+      </div>
+      <div class="wrapTextPromotionContentBox">
+        <div class="tagPromotion">จ่ายได้ทุกที่ VISA</div>
+        <h2 class="topicPromoCutText">จ่ายได้ทุกที่ ที่มีสัญลักษณ์ VISA รับเครดิตเงินคืน</h2>
+        <p class="pPromoCutText">รับเครดิตเงินคืน 3%</p>
+        <span>1 ส.ค. 69 - เป็นต้นไป</span>
+      </div>
+    </a>
+  </div>
+  <div class="promotionContentBox">
+    <!-- a card with no link should be skipped by iter_raw_items -->
+    <div class="tagPromotion">ไม่ควรถูกนับ</div>
+    <h2 class="topicPromoCutText">ไม่มีลิงก์</h2>
+    <span>1 ก.ค. 69 - 31 ต.ค. 69</span>
+  </div>
+</body></html>
+"""
+
+DETAIL_HTML = """
+<html><body>
+  <section class="promotionDetailConditionSection navDetect">
+    <h1>เงื่อนไขรายการส่งเสริมการขาย</h1>
+    <p>รายการส่งเสริมการขายนี้สำหรับลูกค้าบัตรเฟิร์สช้อยส์เท่านั้น</p>
+  </section>
+  <div class="promotionDetailContentSection">
+    <table>
+      <tr><th>ยอดใช้จ่าย</th><th>อัตราเงินคืน</th></tr>
+      <tr><td>10,000 บาท</td><td>3%</td></tr>
+      <tr><td>50,000 บาท</td><td>5%</td></tr>
+    </table>
+  </div>
+</body></html>
+"""
+
+
+@pytest.fixture
+def scraper():
+    return FirstChoicePromotionScraper()
+
+
+@pytest.fixture
+def promos(scraper, monkeypatch):
+    monkeypatch.setattr(
+        "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+    )
+    return scraper.scrape_promotions(BASE_URL)
+
+
+class TestExtractHelpers:
+    def test_promo_link_absolute(self):
+        soup = __import__("bs4").BeautifulSoup(SAMPLE_HTML, "lxml")
+        card = soup.find("div", class_="promotionContentBox")
+        assert promo_link(card) == BASE_URL + "/bts-world-tour-arirang-in-bangkok"
+
+    def test_promo_link_empty_when_no_anchor(self):
+        soup = __import__("bs4").BeautifulSoup(SAMPLE_HTML, "lxml")
+        linkless = soup.find_all("div", class_="promotionContentBox")[-1]
+        assert promo_link(linkless) == ""
+
+    def test_extract_image_absolute(self):
+        soup = __import__("bs4").BeautifulSoup(SAMPLE_HTML, "lxml")
+        card = soup.find("div", class_="promotionContentBox")
+        assert extract_image(card) == "https://www.firstchoice.co.th/getattachment/aaa/thumb.jpg?lang=th-TH&ext=.jpg"
+
+
+class TestIterRawItems:
+    def test_skips_linkless_cards(self, scraper):
+        items = list(scraper.iter_raw_items(SAMPLE_HTML))
+        assert len(items) == 2  # the linkless card is filtered out
+
+
+class TestBuildPromo:
+    def _build(self, scraper, item, details=False):
+        return scraper.build_promo(item, date(2026, 9, 11), details)
+
+    def test_schema_and_fields(self, scraper, promos):
+        p = promos[0]
+        assert p["site"] == "firstchoice"
+        assert p["id"].startswith(f"{SITE_CODE}_")  # namespaced id
+        assert p["post_id"] is None  # no native id
+        assert p["category"] == "กิจกรรม"
+        assert p["category_slugs"] == []
+        assert p["title"] == "กรุงศรีร่วมแจม BTS WORLD TOUR 'ARIRANG' IN BANGKOK"
+        assert p["date_range"] == "1 ส.ค. 69 - 15 พ.ย. 69"
+        assert p["date_start"] == "2026-08-01"
+        assert p["date_end"] == "2026-11-15"
+        assert p["link"] == BASE_URL + "/bts-world-tour-arirang-in-bangkok"
+        assert p["image"].startswith("https://www.firstchoice.co.th/getattachment/")
+        assert p["published_at"] is None
+        assert p["modified_at"] is None
+        # Stage-1 short detail from the card subtitle is a short_detail block.
+        assert p["terms"] == [
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"}
+        ]
+
+    def test_open_ended_date_end_is_none(self, scraper, promos):
+        p = promos[1]
+        assert p["date_start"] == "2026-08-01"
+        assert p["date_end"] is None  # เป็นต้นไป
+
+    def test_ids_unique(self, promos):
+        ids = [p["id"] for p in promos]
+        assert len(ids) == len(set(ids))  # distinct links -> distinct ids
+
+    def test_terms_only_short_detail_without_details(self, scraper):
+        soup = __import__("bs4").BeautifulSoup(SAMPLE_HTML, "lxml")
+        card = soup.find("div", class_="promotionContentBox")
+        p = self._build(scraper, {"card": card})
+        assert p["terms"] == [
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"}
+        ]
+
+    def test_details_appends_conditions_block(self, scraper, monkeypatch):
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_detail",
+            lambda link: ("DETAIL " + link, []),
+        )
+        promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
+        p = promos[0]
+        assert p["terms"] == [
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
+            {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions"},
+        ]
+
+    def test_details_emits_reward_tiers_blocks(self, scraper, monkeypatch):
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_detail",
+            lambda link: ("DETAIL " + link, ["ยอดใช้จ่าย | 3%", "ยอดใช้จ่าย | 5%"]),
+        )
+        promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
+        p = promos[0]
+        assert p["terms"] == [
+            {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
+            {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions"},
+            {"section_title": "ตารางรางวัล 1", "content": "ยอดใช้จ่าย | 3%", "type": "reward_tiers"},
+            {"section_title": "ตารางรางวัล 2", "content": "ยอดใช้จ่าย | 5%", "type": "reward_tiers"},
+        ]
+
+
+class TestFetchDetail:
+    def test_returns_cleaned_conditions_and_reward_tables(self, monkeypatch):
+        class FakeResp:
+            text = DETAIL_HTML
+            apparent_encoding = "utf-8"
+
+            def raise_for_status(self):
+                pass
+
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.session_get",
+            lambda url, timeout: FakeResp(),
+        )
+        conditions, tables = fetch_detail("https://www.firstchoice.co.th/promotion/x")
+        assert conditions is not None
+        assert "เงื่อนไขรายการส่งเสริมการขาย" in conditions
+        assert "ลูกค้าบัตรเฟิร์สช้อยส์" in conditions
+        assert tables == ["ยอดใช้จ่าย | อัตราเงินคืน 10,000 บาท | 3% 50,000 บาท | 5%"]
+
+    def test_empty_tables_when_no_link(self, monkeypatch):
+        assert fetch_detail("") == (None, [])
+
+    def test_empty_tables_on_request_error(self, monkeypatch):
+        def boom(url, timeout):
+            raise RuntimeError("network down")
+
+        monkeypatch.setattr("firstchoice.firstchoice_promo_scraper.session_get", boom)
+        assert fetch_detail("https://www.firstchoice.co.th/promotion/x") == (None, [])

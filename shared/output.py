@@ -21,6 +21,7 @@ SITE_CODES = {
     "seven_eleven": "7el",
     "aeon": "aeon",
     "umayplus": "uma",
+    "firstchoice": "fcb",
 }
 
 
@@ -37,6 +38,53 @@ def make_site_id(site_code: str, post_id, link: str = "") -> str | None:
         digest = hashlib.md5(link.encode("utf-8")).hexdigest()
         return f"{site_code}_{digest[:6]}"
     return None
+
+
+# Content-block types for the uniform `terms` block list. Stable taxonomy,
+# documented in docs/glossary.md. Order in a promo's `terms` is meaningful.
+BLOCK_TYPES = ("short_detail", "conditions", "reward_tiers", "meta")
+
+
+def content_block(section_title: str | None, content: str | None, block_type: str) -> dict:
+    """Build one {section_title, content, type} content block for `terms`.
+
+    `content` is the caller's clean single-line text (use clean_terms_text
+    first). `block_type` must be in BLOCK_TYPES. Returns a dict; content may be
+    None for a block that carries no text.
+    """
+    if block_type not in BLOCK_TYPES:
+        raise ValueError(f"unknown block type: {block_type!r} (allowed: {BLOCK_TYPES})")
+    return {"section_title": section_title, "content": content, "type": block_type}
+
+
+def normalize_terms(value):
+    """Coerce any legacy `terms` shape into a uniform list of content blocks.
+
+    Accepts: None -> []; a plain string -> one `conditions` block; a list of
+    {label, text} objects -> blocks keyed on label; already-block-list -> as-is.
+    Migration shim so consumers and tests have one entry point regardless of
+    which site produced the data.
+    """
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [content_block(None, value, "conditions")] if value else []
+    if isinstance(value, list):
+        blocks = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            if "content" in item and "type" in item:
+                blocks.append(item)  # already a block
+            elif "text" in item:  # legacy {label, text}
+                label = item.get("label")
+                # Legacy firstchoice emitted {label: "tables"} for reward tables.
+                block_type = "reward_tiers" if label == "tables" else (
+                    label if label in BLOCK_TYPES else "conditions"
+                )
+                blocks.append(content_block(label, item.get("text"), block_type))
+        return blocks
+    return []
 
 
 def _ensure_output_dir(path):
@@ -61,11 +109,16 @@ def save_csv(promos, path):
         writer.writeheader()
         for p in promos:
             row = dict(p)
-            # Serialize list-valued columns (e.g. category_slugs, terms_items,
-            # terms) as semicolon-joined strings; CSV has no list type. For
-            # lists of {label, text} objects (like terms), join just the text.
+            # Serialize list-valued columns (e.g. category_slugs, terms) as
+            # semicolon-joined strings; CSV has no list type. For the `terms`
+            # content-block list, join just each block's content.
             for k, v in row.items():
                 if isinstance(v, list):
-                    parts = [x.get("text", x) if isinstance(x, dict) else x for x in v]
+                    parts = []
+                    for x in v:
+                        if isinstance(x, dict):
+                            parts.append(x.get("content", x.get("text", "")))
+                        else:
+                            parts.append(x)
                     row[k] = ";".join(str(x) for x in parts)
             writer.writerow(row)

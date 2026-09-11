@@ -108,7 +108,7 @@ class TestBuildPromo:
         assert promo["image"] == "https://example.com/promo.jpg"
         assert promo["published_at"] is None
         assert promo["modified_at"] is None
-        assert promo["terms"] is None
+        assert promo["terms"] == []  # no --details -> empty block list
 
     def test_promo_without_dates(self):
         """Promo with null start/end dates has None for date_start/date_end."""
@@ -153,7 +153,7 @@ class TestBuildPromo:
         }
         promo = _build(item, "test", "Test Category", True)
 
-        assert promo["terms"] == "Full terms and conditions"
+        assert promo["terms"] == [{"section_title": "เงื่อนไข", "content": "Full terms and conditions", "type": "conditions"}]
         assert promo["published_at"] is not None
         assert promo["modified_at"] is not None
         assert "2026-08-23" in promo["published_at"]
@@ -175,7 +175,7 @@ class TestBuildPromo:
         }
         promo = _build(item, "test", "Test Category")
 
-        assert promo["terms"] is None
+        assert promo["terms"] == []  # fetch_details=False -> empty block list
         assert promo["published_at"] is None
         assert promo["modified_at"] is None
 

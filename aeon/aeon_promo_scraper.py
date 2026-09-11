@@ -67,7 +67,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_thai_date_range_full
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, make_site_id
+from shared.output import SITE_CODES, content_block, make_site_id
 
 DEFAULT_URL = "https://www.aeon.co.th/aeon/promotions/"
 SITE_NAME = "aeon"
@@ -236,20 +236,17 @@ class AeonPromotionScraper(PromotionScraper):
         date_start, date_end = parse_thai_date_range_full(date_range, today)
 
         card_body = extract_card_body(package)
-        detail_terms = None
-        if fetch_details:
-            # Full terms come from the detail page (div.newDetails); AEON exposes no
-            # publish/modify timestamps. The base class prefetches all promos'
-            # detail pages in parallel (see scrape_promotions) and caches them by
-            # link; build_promo just reads its own from that cache.
-            detail_terms = (self._detail_terms or {}).get(link)
 
-        # terms joins the listing-card body and the detail-page content into a
-        # single list, each entry labelled by its source.
-        terms = [
-            {"label": "card", "text": card_body},
-            {"label": "detail", "text": detail_terms},
-        ] if fetch_details else None
+        # terms is a uniform block list (shared.output.content_block): the
+        # listing-card body is a stage-1 short_detail block; the detail-page
+        # content (div.newDetails) is a conditions block.
+        terms = []
+        if card_body:
+            terms.append(content_block("สรุปย่อ", card_body, "short_detail"))
+        if fetch_details:
+            detail_terms = (self._detail_terms or {}).get(link)
+            if detail_terms:
+                terms.append(content_block("ข้อกำหนดและเงื่อนไข", detail_terms, "conditions"))
 
         return {
             "id": make_site_id(SITE_CODE, None, link),

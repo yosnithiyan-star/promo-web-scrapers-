@@ -76,3 +76,51 @@ for speed; pass `--details` to fetch them (~3.5 min for 171 promos).
 A single run only ever produces one output file per day; re-running with
 the same flags on the same day overwrites that day's file (no
 append/versioning).
+
+### umayplus
+
+[umayplus/umayplus_promo_scraper.py](umayplus/umayplus_promo_scraper.py)
+scrapes https://www.umayplus.com/promotion and saves to
+`umayplus/raw/<date>/promos[_with_details].json|csv`.
+
+```
+pip install -r requirements.txt
+
+python umayplus/umayplus_promo_scraper.py
+python umayplus/umayplus_promo_scraper.py --details
+python umayplus/umayplus_promo_scraper.py --format csv
+python umayplus/umayplus_promo_scraper.py --out somewhere/else.json
+```
+
+### firstchoice
+
+[firstchoice/firstchoice_promo_scraper.py](firstchoice/firstchoice_promo_scraper.py)
+scrapes https://www.firstchoice.co.th/promotion and saves to
+`firstchoice/raw/<date>/promos[_with_details].json|csv`.
+
+```
+pip install -r requirements.txt
+
+python firstchoice/firstchoice_promo_scraper.py
+python firstchoice/firstchoice_promo_scraper.py --details
+python firstchoice/firstchoice_promo_scraper.py --format csv
+python firstchoice/firstchoice_promo_scraper.py --out somewhere/else.json
+```
+
+First Choice is server-rendered HTML (no embedded JSON), so it scrapes the DOM
+like AEON/TrueMoney. All promos live on the single `/promotion` page (no
+pagination). It has no native promo id, so `post_id` is `None` and dedup uses
+the namespaced `id` (`fcb_` + link hash). The `category` is the listing badge
+text verbatim (may be a card-network label like "จ่ายได้ทุกที่ VISA", not just a
+category). Dates are abbreviated Thai Buddhist-era strings.
+
+Details (`terms` as a block list: `short_detail` / `conditions` / `reward_tiers`;
+one request per promo) are disabled by default for speed; pass `--details` to
+fetch them in parallel.
+
+A single run only ever produces one output file per day; re-running with
+the same flags on the same day overwrites that day's file (no
+append/versioning).
+
+Design decisions are recorded in `docs/adr-001-firstchoice.md`; shared
+terminology is in `docs/glossary.md`.

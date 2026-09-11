@@ -103,7 +103,8 @@ class TestBuildPromo:
         assert p["link"] == BASE_URL + "insurance-big-care-counter"
         assert p["image"].startswith("https://www.aeon.co.th/contentAsset/")
         assert p["id"].startswith(f"{SITE_CODE}_")
-        assert p["terms"] is None
+        # Stage-1 card body is a short_detail block (present even without --details).
+        assert p["terms"] and p["terms"][0]["type"] == "short_detail"
 
     def test_range_with_year_backfill(self, soup_packages):
         p = self._build(soup_packages["lazada-september-2026"], "credit-card")
@@ -121,7 +122,7 @@ class TestBuildPromo:
     def test_details_fetches_terms(self, monkeypatch):
         # --details prefetches each promo's detail page in parallel (via
         # scrape_promotions -> _prefetch_detail_terms -> fetch_terms), caches by
-        # link, then build_promo joins card body + detail as {label, text}.
+        # link, then build_promo emits a block list: short_detail + conditions.
         monkeypatch.setattr(
             "aeon.aeon_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
         )
@@ -132,15 +133,18 @@ class TestBuildPromo:
         promos = AeonPromotionScraper().scrape_promotions(BASE_URL, fetch_details=True)
         assert len(promos) == 3
         for p in promos:
-            assert p["terms"][0]["label"] == "card"
-            assert p["terms"][1]["label"] == "detail"
-            assert p["terms"][1]["text"] == "DETAIL " + p["link"]
+            assert p["terms"][0]["type"] == "short_detail"
+            assert p["terms"][1]["type"] == "conditions"
+            assert p["terms"][1]["content"] == "DETAIL " + p["link"]
         assert "terms_items" not in promos[0]
         assert "card_body" not in promos[0]
 
-    def test_no_details_leaves_terms_none(self, soup_packages):
+    def test_no_details_leaves_only_short_detail(self, soup_packages):
         p = self._build(soup_packages["insurance-big-care-counter"], "insurance", details=False)
-        assert p["terms"] is None
+        # Without --details only the stage-1 short_detail block is present.
+        assert p["terms"] == [
+            {"section_title": "สรุปย่อ", "type": "short_detail", "content": "ระยะเวลา : 1 เมษายน 2568 เป็นต้นไป สถานที่ : สาขาอิออนและบิ๊กแคร์เคาน์เตอร์"}
+        ]
 
 
 # Detail page HTML: full terms live in div.newDetails (real AEON structure).

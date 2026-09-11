@@ -15,8 +15,14 @@ folder with a self-contained scraper.
   `seven_eleven/raw/<date>/`.
 - `aeon/aeon_promo_scraper.py` — server-rendered DOM scraping of
   https://www.aeon.co.th/aeon/promotions/. Output to `aeon/raw/<date>/`.
+- `umayplus/` and `firstchoice/` — two more DOM scrapers on the same base class.
 - `shared/` — reusable modules extracted in Phase 1.
+- `tools/analyze_site.py` — design-time advisor: given a site's stage-1/stage-2
+  HTML, heuristically recommends a selector→`terms`-block-type mapping (and
+  flags see-more/CSS-clip wrappers) before a scraper is written.
 - `tests/` — pytest suite.
+- `docs/` — ADRs (`adr-001-firstchoice.md`), `spec-block-terms.md`,
+  `glossary.md`.
 
 ## Setup & run
 
@@ -73,8 +79,14 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 - `site` holds the site code (e.g. `truemoney`, `seven_eleven`, `aeon`), the
   key into `shared.output.SITE_CODES`.
 - Dates are ISO `YYYY-MM-DD`. `scraped_at` is `YYYY-MM-DD HH:MM:SS` in GMT+7.
-- `terms` must be plain text — strip HTML before storing. (AEON uses a list of
-  `{label, text}` objects; TrueMoney/7-Eleven use a plain string.)
+- `terms` is a **uniform block list** — `[{section_title, content, type}]` —
+  across all sites, built via `shared.output.content_block`. `type` is one of
+  `short_detail` (stage-1 card text), `conditions` (detail-page prose),
+  `reward_tiers` (a flattened reward `<table>`), `meta`. `content` is clean
+  single-line text (`clean_terms_text` output), never raw HTML. Empty list
+  `[]` when `--details` is off or a site exposes no detail. Legacy shapes
+  (plain string / `{label, text}` list) are coerced by
+  `shared.output.normalize_terms`.
 - `--details` adds `published_at`/`modified_at`/`terms` and is off by default.
   For 7-Eleven these fields come from the embedded JSON (no extra request);
   for TrueMoney each adds a per-promo request (~40s for 35 promos); for AEON

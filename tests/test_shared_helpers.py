@@ -5,7 +5,13 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.output import SITE_CODES, make_site_id
+from shared.output import (
+    SITE_CODES,
+    make_site_id,
+    content_block,
+    normalize_terms,
+    BLOCK_TYPES,
+)
 from shared.detail_fetcher import clean_terms_text
 
 
@@ -31,6 +37,50 @@ class TestMakeSiteId:
 
     def test_no_id_without_post_id_or_link(self):
         assert make_site_id("tmn", None) is None
+
+
+class TestContentBlock:
+    def test_builds_block(self):
+        b = content_block("เงื่อนไข", "text here", "conditions")
+        assert b == {"section_title": "เงื่อนไข", "content": "text here", "type": "conditions"}
+
+    def test_rejects_unknown_type(self):
+        import pytest
+        with pytest.raises(ValueError):
+            content_block(None, "x", "bogus")
+
+    def test_allows_all_block_types(self):
+        for t in BLOCK_TYPES:
+            assert content_block(None, "x", t)["type"] == t
+
+
+class TestNormalizeTerms:
+    def test_none_to_empty(self):
+        assert normalize_terms(None) == []
+
+    def test_string_to_conditions_block(self):
+        assert normalize_terms("สแกน") == [
+            {"section_title": None, "content": "สแกน", "type": "conditions"}
+        ]
+
+    def test_empty_string_to_empty(self):
+        assert normalize_terms("") == []
+
+    def test_legacy_label_text_to_blocks(self):
+        out = normalize_terms([{"label": "detail", "text": "a"}, {"label": "tables", "text": "b"}])
+        assert out == [
+            {"section_title": "detail", "content": "a", "type": "conditions"},
+            {"section_title": "tables", "content": "b", "type": "reward_tiers"},
+        ]
+
+    def test_already_blocks_passed_through(self):
+        blocks = [content_block(None, "a", "conditions")]
+        assert normalize_terms(blocks) == blocks
+
+    def test_non_dict_items_skipped(self):
+        assert normalize_terms(["nope", {"label": "detail", "text": "ok"}]) == [
+            {"section_title": "detail", "content": "ok", "type": "conditions"}
+        ]
 
 
 class TestCleanTermsText:
@@ -88,3 +138,27 @@ class TestDefaultOutputPath:
         path = scraper.default_output_path("json", details=False)
         assert os.path.isdir(os.path.dirname(path))
         assert os.path.basename(os.path.dirname(path)).count("-") == 2  # YYYY-MM-DD
+
+
+class TestSaveCsvBlockProjection:
+    def test_terms_block_list_joins_content(self, tmp_path):
+        from shared.output import save_csv
+        out = str(tmp_path / "p.csv")
+        promos = [{
+            "id": "fcb_x", "site": "firstchoice", "post_id": None,
+            "category": "กิจกรรม", "category_slugs": [], "title": "t",
+            "date_range": "1 ส.ค. 69 - 15 พ.ย. 69", "date_start": "2026-08-01",
+            "date_end": "2026-11-15", "link": "https://x/p",
+            "image": None, "scraped_at": "2026-09-12 00:00:00",
+            "published_at": None, "modified_at": None,
+            "terms": [
+                {"section_title": "เงื่อนไข", "content": "ข้อ 1 ข้อ 2", "type": "conditions"},
+                {"section_title": "รางวัล", "content": "ยอดใช้จ่าย | 3%", "type": "reward_tiers"},
+            ],
+        }]
+        save_csv(promos, out)
+        with open(out, encoding="utf-8-sig") as f:
+            row = f.readlines()[1].rstrip("\n")
+        # The terms cell joins block contents with ';'.
+        assert "ข้อ 1 ข้อ 2" in row and "ยอดใช้จ่าย | 3%" in row
+        assert ";".join(["ข้อ 1 ข้อ 2", "ยอดใช้จ่าย | 3%"]) in row

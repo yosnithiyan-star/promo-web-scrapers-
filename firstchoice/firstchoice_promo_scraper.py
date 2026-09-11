@@ -71,7 +71,10 @@ DEFAULT_URL = "https://www.firstchoice.co.th/promotion"
 SITE_NAME = "firstchoice"
 SITE_CODE = SITE_CODES[SITE_NAME]
 
-# Detail-page terms/conditions container (a <section> on the live detail page).
+# The wrapper holds both the main content section AND the conditions section
+# (which are siblings inside it). Splitting the wrapper captures the full
+# detail. Fall back to the condition section alone if the wrapper is absent.
+DETAIL_WRAPPER_SELECTOR = ".wrapperPageRMMobileB"
 DETAIL_TERMS_SELECTOR = ".promotionDetailConditionSection"
 DETAIL_CONCURRENCY = 8
 
@@ -162,8 +165,12 @@ def fetch_detail(link: str) -> list[dict]:
     One HTTP request per promo. Returns [] if the request fails or the page has
     no detail content.
 
-    Returns the detail page's conditions split at its h2/h3 headings into
-    [{section_title, text}] blocks, in DOM order. Each block flattens its prose
+    Returns the detail page's body split at its h2/h3 headings into
+    [{section_title, text}] blocks, in DOM order. The body is taken from the
+    wrapperPageRMMobileB container, which holds BOTH the main promo content
+    section (promotionDetailContentSection) and the conditions section
+    (promotionDetailConditionSection) as siblings — splitting the whole wrapper
+    captures the full detail, not just the terms. Each block flattens its prose
     and any reward <table>. First Choice's "แสดงเนื้อหา" (see more) is a CSS clip
     on the same wrapper, so the full text is already in the DOM.
     First Choice exposes no publish/modify meta.
@@ -177,7 +184,9 @@ def fetch_detail(link: str) -> list[dict]:
         return []
     resp.encoding = resp.apparent_encoding
     soup = BeautifulSoup(resp.text, "lxml")
-    container = soup.select_one(DETAIL_TERMS_SELECTOR)
+    # Prefer the wrapper (content + conditions); fall back to the condition
+    # section alone for pages that lack the content wrapper.
+    container = soup.select_one(DETAIL_WRAPPER_SELECTOR) or soup.select_one(DETAIL_TERMS_SELECTOR)
     return _split_detail_sections(container)
 
 

@@ -206,6 +206,39 @@ class TestFetchDetail:
         assert "ยอดใช้จ่าย | อัตราเงินคืน" in s["text"]
         assert "10,000 บาท | 3%" in s["text"]
 
+    def test_captures_main_content_and_conditions_via_wrapper(self, monkeypatch):
+        # wrapperPageRMMobileB holds both the main content section and the
+        # conditions section; fetch_detail must split the wrapper so neither is
+        # dropped (the content section was previously missed entirely).
+        wrapper_html = """
+        <html><body>
+          <div class="wrapperPageRMMobileB">
+            <div class="promotionDetailContentSection">
+              <h2>กดเงินสดผ่าน U CASH รับกระเป๋าเดินทาง</h2>
+              <p>เบิกถอนเงินสดด้วยบัตรเฟิร์สช้อยส์ผ่านฟีเจอร์ U CASH</p>
+            </div>
+            <section class="promotionDetailConditionSection">
+              <h2>เงื่อนไขรายการส่งเสริมการขาย</h2>
+              <p>สำหรับลูกค้าที่ถือบัตรอย่างน้อย 2 เดือน</p>
+            </section>
+          </div>
+        </body></html>
+        """
+        class FakeResp:
+            text = wrapper_html
+            apparent_encoding = "utf-8"
+            def raise_for_status(self):
+                pass
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.session_get",
+            lambda url, timeout: FakeResp(),
+        )
+        sections = fetch_detail("https://www.firstchoice.co.th/promotion/ucash-promotion")
+        titles = [s["section_title"] for s in sections]
+        assert "กดเงินสดผ่าน U CASH รับกระเป๋าเดินทาง" in titles  # main content
+        assert "เงื่อนไขรายการส่งเสริมการขาย" in titles  # conditions
+        assert any("U CASH" in (s["text"] or "") for s in sections)
+
     def test_empty_when_no_link(self, monkeypatch):
         assert fetch_detail("") == []
 

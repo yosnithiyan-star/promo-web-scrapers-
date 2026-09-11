@@ -20,6 +20,7 @@ SITE_CODES = {
     "truemoney": "tmn",
     "seven_eleven": "7el",
     "aeon": "aeon",
+    "umayplus": "uma",
 }
 
 

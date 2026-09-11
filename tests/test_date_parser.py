@@ -6,6 +6,7 @@ from shared.date_parser import (
     parse_thai_date_token,
     parse_date_range,
     parse_thai_date_range_full,
+    parse_gregorian_date_range,
     DATE_RANGE_RE,
 )
 
@@ -226,6 +227,38 @@ class TestParseThaiDateRangeFull:
         for name, num in months.items():
             start, _ = parse_thai_date_range_full(f"5 {name} 2569 เป็นต้นไป", self.today)
             assert start == f"2026-{num:02d}-05", f"failed for {name}"
+
+
+class TestParseGregorianDateRange:
+    """Test parsing of Gregorian DD/MM/YYYY date ranges (umayplus)."""
+
+    def test_standard_range(self):
+        start, end = parse_gregorian_date_range("01/08/2026 - 30/09/2026")
+        assert start == "2026-08-01"
+        assert end == "2026-09-30"
+
+    def test_single_date(self):
+        start, end = parse_gregorian_date_range("15/03/2026")
+        assert start == "2026-03-15"
+        assert end == "2026-03-15"
+
+    def test_en_dash(self):
+        start, end = parse_gregorian_date_range("01/08/2026 – 30/09/2026")
+        assert start == "2026-08-01"
+        assert end == "2026-09-30"
+
+    def test_empty(self):
+        assert parse_gregorian_date_range("") == (None, None)
+        assert parse_gregorian_date_range(None) == (None, None)
+
+    def test_unparseable(self):
+        assert parse_gregorian_date_range("ตั้งแต่วันนี้จนกว่าสินค้าจะหมด") == (None, None)
+
+    def test_invalid_date(self):
+        # 31 Feb is invalid -> None
+        start, end = parse_gregorian_date_range("31/02/2026 - 30/09/2026")
+        assert start is None
+        assert end == "2026-09-30"
 
 
 if __name__ == "__main__":

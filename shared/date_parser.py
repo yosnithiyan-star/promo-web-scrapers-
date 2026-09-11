@@ -160,3 +160,38 @@ def parse_thai_date_range_full(date_range: str, today: date):
         start.isoformat() if start else None,
         end.isoformat() if end else None,
     )
+
+
+# --- Gregorian date parsing (e.g. umayplus: "01/08/2026 - 30/09/2026") ---
+#
+# Some sites use plain Gregorian DD/MM/YYYY ranges instead of Thai Buddhist-era
+# strings. No BE->CE conversion applies; only the tokenizer differs.
+
+GRE_GREGORIAN_RE = re.compile(r"(\d{1,2})/(\d{1,2})/(\d{4})")
+
+
+def parse_gregorian_date_range(date_range: str):
+    """Parse a Gregorian 'DD/MM/YYYY - DD/MM/YYYY' range into ISO strings.
+
+    Returns (date_start, date_end) ISO strings, or (None, None) when the input
+    has no parseable date. A single date is treated as both start and end. Open
+    ranges are not a concept here (no 'เป็นต้นไป'); unparseable tokens -> None.
+    """
+    if not date_range:
+        return None, None
+
+    tokens = [t.strip() for t in date_range.replace("–", "-").replace("—", "-").split("-") if t.strip()]
+
+    def to_iso(token):
+        m = GRE_GREGORIAN_RE.search(token)
+        if not m:
+            return None
+        day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            return None
+
+    start = to_iso(tokens[0]) if tokens else None
+    end = to_iso(tokens[1]) if len(tokens) > 1 else start
+    return start, end

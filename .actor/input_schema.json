@@ -10,6 +10,14 @@
       "default": false,
       "editor": "checkbox"
     },
+    "maxItems": {
+      "title": "Max promos per site",
+      "type": "integer",
+      "description": "Maximum number of promos to scrape per site per run. 0 means no limit (scrape all).",
+      "default": 0,
+      "minimum": 0,
+      "editor": "number"
+    },
     "enable_truemoney": {
       "title": "TrueMoney",
       "type": "boolean",

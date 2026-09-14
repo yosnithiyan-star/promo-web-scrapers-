@@ -45,11 +45,14 @@ SCRAPERS = [
 ]
 
 
-async def run_scraper(site_key, scraper, fetch_details):
+async def run_scraper(site_key, scraper, fetch_details, max_items=0):
     """Run one scraper and push its promos."""
     start = time.time()
     promos = scraper.scrape_promotions(fetch_details=fetch_details)
     elapsed = time.time() - start
+
+    if max_items > 0:
+        promos = promos[:max_items]
 
     problems = validate_promos(promos)
     if problems:
@@ -70,6 +73,7 @@ async def main() -> None:
     async with Actor:
         actor_input = await Actor.get_input() or {}
         fetch_details = bool(actor_input.get("details", False))
+        max_items = int(actor_input.get("maxItems", 0) or 0)
 
         # Each site has an enable_<key> checkbox in the input schema; a missing
         # value means the site is left enabled (matches the schema default).
@@ -85,7 +89,7 @@ async def main() -> None:
         for scraper in enabled:
             key = scraper.SITE_NAME
             try:
-                await run_scraper(key, scraper, fetch_details)
+                await run_scraper(key, scraper, fetch_details, max_items)
             except Exception as exc:  # one bad site must not kill the run
                 print(f"[{key}] FAILED: {exc}", file=sys.stderr)
         print(f"Done. {len(enabled)} site(s) scraped.", file=sys.stderr)

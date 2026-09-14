@@ -10,19 +10,47 @@
       "default": false,
       "editor": "checkbox"
     },
-    "sites": {
-      "title": "Sites",
-      "type": "object",
-      "description": "Enable or disable individual sites. Omitted keys default to enabled.",
-      "default": {
-        "truemoney": true,
-        "seven_eleven": true,
-        "aeon": true,
-        "umayplus": true,
-        "firstchoice": true,
-        "kbj": true
-      },
-      "editor": "json"
+    "enable_truemoney": {
+      "title": "TrueMoney",
+      "type": "boolean",
+      "description": "Scrape truemoney.com/promotion.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "enable_seven_eleven": {
+      "title": "7-Eleven",
+      "type": "boolean",
+      "description": "Scrape 7eleven.co.th/promotion.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "enable_aeon": {
+      "title": "AEON",
+      "type": "boolean",
+      "description": "Scrape aeon.co.th/aeon/promotions.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "enable_umayplus": {
+      "title": "U-May Plus",
+      "type": "boolean",
+      "description": "Scrape umayplus.com/promotion.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "enable_firstchoice": {
+      "title": "First Choice",
+      "type": "boolean",
+      "description": "Scrape firstchoice.co.th/promotion.",
+      "default": true,
+      "editor": "checkbox"
+    },
+    "enable_kbj": {
+      "title": "KBJ Capital",
+      "type": "boolean",
+      "description": "Scrape kbjcapital.co.th/promotion.",
+      "default": true,
+      "editor": "checkbox"
     }
   }
 }

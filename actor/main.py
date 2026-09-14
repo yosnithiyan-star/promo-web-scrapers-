@@ -16,13 +16,11 @@ import asyncio
 import os
 import sys
 import time
-from datetime import datetime
 
 from apify import Actor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.common import THAILAND_TZ, format_thai_dt  # noqa: E402
 from shared.output import validate_promos  # noqa: E402
 
 from aeon.aeon_promo_scraper import AeonPromotionScraper  # noqa: E402
@@ -72,12 +70,13 @@ async def main() -> None:
     async with Actor:
         actor_input = await Actor.get_input() or {}
         fetch_details = bool(actor_input.get("details", False))
-        per_site = actor_input.get("sites") or {}
 
-        run_at = format_thai_dt(datetime.now(THAILAND_TZ))
-
+        # Each site has an enable_<key> checkbox in the input schema; a missing
+        # value means the site is left enabled (matches the schema default).
         enabled = [
-            scraper for _, scraper in SCRAPERS if per_site.get(scraper.SITE_NAME, True)
+            scraper
+            for _, scraper in SCRAPERS
+            if actor_input.get(f"enable_{scraper.SITE_NAME}", True)
         ]
         if not enabled:
             print("No scrapers enabled in input; nothing to do.", file=sys.stderr)
@@ -89,7 +88,7 @@ async def main() -> None:
                 await run_scraper(key, scraper, fetch_details)
             except Exception as exc:  # one bad site must not kill the run
                 print(f"[{key}] FAILED: {exc}", file=sys.stderr)
-        print(f"Done. Run finished at {run_at} over {len(enabled)} site(s).", file=sys.stderr)
+        print(f"Done. {len(enabled)} site(s) scraped.", file=sys.stderr)
 
 
 if __name__ == "__main__":

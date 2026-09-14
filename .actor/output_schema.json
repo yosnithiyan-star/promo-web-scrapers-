@@ -1,23 +1,15 @@
 {
-  "schemaVersion": 1,
-  "title": "Promo",
+  "$schema": "https://apify-projects.github.io/actor-json-schemas/output.json?v=0.3",
+  "actorOutputSchemaVersion": 1,
+  "title": "Thai Promo Scraper output",
+  "description": "Every run pushes the scraped promos to the default dataset, one record per promo, using the shared PROMO_FIELDNAMES schema.",
   "type": "object",
   "properties": {
-    "id": { "type": "string", "description": "Namespaced, cross-site-unique id (e.g. tmn_236401)" },
-    "site": { "type": "string", "description": "Site code: truemoney | seven_eleven | aeon | umayplus | firstchoice | kbj" },
-    "post_id": { "type": ["string", "null"], "description": "Site's native numeric id, or null" },
-    "category": { "type": "string", "description": "Display category/tag, if any" },
-    "category_slugs": { "type": "array", "items": { "type": "string" }, "description": "Filter slugs, if the site exposes them" },
-    "title": { "type": "string", "description": "Promo headline" },
-    "date_range": { "type": "string", "description": "Raw validity text (Thai)" },
-    "date_start": { "type": ["string", "null"], "description": "Validity start, ISO YYYY-MM-DD" },
-    "date_end": { "type": ["string", "null"], "description": "Validity end, ISO YYYY-MM-DD" },
-    "link": { "type": "string", "description": "URL to the promo detail page" },
-    "image": { "type": "string", "description": "Card thumbnail URL" },
-    "scraped_at": { "type": "string", "description": "Run timestamp, YYYY-MM-DD HH:MM:SS GMT+7" },
-    "published_at": { "type": ["string", "null"], "description": "Publication date, when available (details)" },
-    "modified_at": { "type": ["string", "null"], "description": "Modification date, when available (details)" },
-    "terms": { "type": "object", "description": "Keyed term_detail_N blocks {section_title, content, type}" }
-  },
-  "required": ["id", "site", "post_id", "title", "date_range", "date_start", "date_end", "link", "scraped_at", "terms"]
+    "promos": {
+      "type": "string",
+      "title": "Promotions",
+      "description": "All scraped promos across the enabled sites, one JSON record per promo.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    }
+  }
 }

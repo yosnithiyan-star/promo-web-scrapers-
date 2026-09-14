@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from seven_eleven.seven_eleven_promo_scraper import (
     SevenElevenPromotionScraper,
+    build_detail_link,
     extract_next_data,
     extract_image_url,
 )
@@ -104,7 +105,7 @@ class TestBuildPromo:
         assert promo["date_end"] == "2026-09-23"
         assert promo["category"] == "สินค้าราคาพิเศษ"
         assert promo["category_slugs"] == ["trade"]
-        assert promo["link"] == "https://www.7eleven.co.th/promotion/trade/3711"
+        assert promo["link"] == "https://www.7eleven.co.th/promotion/trade/3711-อร่อยราคาพิเศษ"
         assert promo["image"] == "https://example.com/promo.jpg"
         assert promo["published_at"] is None
         assert promo["modified_at"] is None
@@ -210,6 +211,48 @@ class TestBuildPromo:
             promo = promos[0]
             assert promo["scraped_at"] is not None
             assert " " in promo["scraped_at"]  # should be "YYYY-MM-DD HH:MM:SS" format
+
+
+class TestBuildDetailLink:
+    def test_link_uses_id_and_slug(self):
+        """Link is /promotion/{category}/{id}-{slug} from id + slug_th."""
+        item = {"id": 269, "slug_th": "ลดอย่างแรง-3", "item_category": "sale"}
+        link = build_detail_link(BASE_URL, item, "sale")
+        assert link == "https://www.7eleven.co.th/promotion/sale/269-ลดอย่างแรง-3"
+
+    def test_link_falls_back_to_title_when_slug_absent(self):
+        """When slug_th is absent, the title becomes the slug."""
+        item = {"id": 275, "title_th": "ลดจัดหนัก สุขจัดเต็ม"}
+        link = build_detail_link(BASE_URL, item, "redeem")
+        assert link == "https://www.7eleven.co.th/promotion/redeem/275-ลดจัดหนัก-สุขจัดเต็ม"
+
+    def test_spaces_in_slug_become_hyphens(self):
+        """Whitespace in the slug/title is normalized to hyphens."""
+        item = {"id": 31, "slug_th": "ลดอย่างแรง 1", "item_category": "sale"}
+        link = build_detail_link(BASE_URL, item, "sale")
+        assert link == "https://www.7eleven.co.th/promotion/sale/31-ลดอย่างแรง-1"
+
+    def test_section_key_is_category_when_item_category_absent(self):
+        """Falls back to the section key when item_category is missing."""
+        item = {"id": 278, "slug_th": "combo2"}
+        link = build_detail_link(BASE_URL, item, "matching")
+        assert link == "https://www.7eleven.co.th/promotion/matching/278-combo2"
+
+    def test_two_promos_in_same_category_get_distinct_links(self):
+        """Cards in one category produce different links, not the shared category path."""
+        item_a = {"id": 269, "slug_th": "ลดอย่างแรง-3", "item_category": "sale"}
+        item_b = {"id": 32, "slug_th": "ลดอย่างแรง 2", "item_category": "sale"}
+        link_a = build_detail_link(BASE_URL, item_a, "sale")
+        link_b = build_detail_link(BASE_URL, item_b, "sale")
+        assert link_a != link_b
+        assert "/sale/269-" in link_a
+        assert "/sale/32-" in link_b
+
+    def test_missing_id_falls_back_to_coarse_category_link(self):
+        """Without id/slug the coarse category path is used so the promo is not dropped."""
+        item = {"item_url": "/promotion/sale/"}
+        link = build_detail_link(BASE_URL, item, "sale")
+        assert link == "https://www.7eleven.co.th/promotion/sale/"
 
 
 if __name__ == "__main__":

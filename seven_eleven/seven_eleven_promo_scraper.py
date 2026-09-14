@@ -113,6 +113,27 @@ def extract_image_url(item: dict) -> str | None:
     return None
 
 
+def build_detail_link(base_url: str, item: dict, section_key: str) -> str:
+    """Build the promo's real detail URL: /promotion/{category}/{id}-{slug}/.
+
+    The embedded JSON only carries a coarse category path in `item_url`. The
+    browser-facing card href is `/promotion/{category}/{native_id}-{slug}/`,
+    where {category} is `item_category` when present else the section key, and
+    {slug} is `slug_th` when present else the title, with spaces -> hyphens.
+    Confirmed against live 7-Eleven card hrefs (e.g. /promotion/sale/269-...).
+    """
+    post_id = item.get("id")
+    slug = item.get("slug_th") or item.get("title_th") or ""
+    if post_id is None or not slug:
+        # No id/slug to build a unique detail path; fall back to the coarse
+        # category path so the promo is not dropped.
+        item_url = item.get("item_url")
+        return urljoin(base_url, item_url) if item_url else base_url
+    category = item.get("item_category") or section_key
+    slug_hyphen = re.sub(r"\s+", "-", slug).strip("-")
+    return urljoin(base_url, f"/promotion/{category}/{post_id}-{slug_hyphen}")
+
+
 class SevenElevenPromotionScraper(PromotionScraper):
     """7-Eleven-specific scraper: __NEXT_DATA__ JSON extraction."""
 
@@ -156,8 +177,7 @@ class SevenElevenPromotionScraper(PromotionScraper):
         post_id = item.get("id")
         title = item.get("title_th", "")
         date_range = (item.get("desc_th") or "").strip()
-        item_url = item.get("item_url", "")
-        link = urljoin(base_url, item_url) if item_url else ""
+        link = build_detail_link(base_url, item, section_key)
 
         start_iso = item.get("start_date")
         end_iso = item.get("end_date")

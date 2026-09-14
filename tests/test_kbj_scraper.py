@@ -15,6 +15,7 @@ from kbj.kbj_promo_scraper import (
     DEFAULT_URL,
 )
 from urllib.parse import urljoin
+from shared.output import post_id_from_link
 
 BASE_URL = DEFAULT_URL
 
@@ -88,7 +89,7 @@ class TestBuildPromo:
         items = list(KbjPromotionScraper().iter_raw_items(LISTING_HTML))
         p = KbjPromotionScraper().build_promo(items[0], date(2026, 9, 14))
         assert p["site"] == "kbj"
-        assert p["post_id"] is None
+        assert p["post_id"] == post_id_from_link(p["link"])  # synthetic from link hash
         assert p["title"] == "ผ่อนของที่ใช่ ได้ที่ Jaymart ดอกเบี้ย 0%"
         assert p["category"] == "สมัครบัตร"
         assert p["category_slugs"] == []

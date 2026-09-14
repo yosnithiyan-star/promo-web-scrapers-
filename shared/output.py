@@ -26,6 +26,17 @@ SITE_CODES = {
 }
 
 
+def post_id_from_link(link: str) -> str:
+    """Stable synthetic post_id for sites with no native id (AEON, FirstChoice, KBJ).
+
+    Returns a short md5 hash of the promo link, matching the fallback branch of
+    make_site_id so the namespaced id and synthesized post_id stay consistent
+    (e.g. post_id "e564eb" under id "aeon_e564eb").
+    """
+    digest = hashlib.md5(link.encode("utf-8")).hexdigest()
+    return digest[:6]
+
+
 def make_site_id(site_code: str, post_id, link: str = "") -> str | None:
     """Build the namespaced, cross-site-unique id for a promo.
 
@@ -36,8 +47,7 @@ def make_site_id(site_code: str, post_id, link: str = "") -> str | None:
     if post_id is not None:
         return f"{site_code}_{post_id}"
     if link:
-        digest = hashlib.md5(link.encode("utf-8")).hexdigest()
-        return f"{site_code}_{digest[:6]}"
+        return f"{site_code}_{post_id_from_link(link)}"
     return None
 
 
@@ -123,12 +133,17 @@ def validate_promos(promos: list[dict]) -> list[str]:
             problems.append(f"{label}: missing fields {sorted(missing)}")
 
         pid = promo.get("id")
-        if pid is None or not str(pid):
+        if pid is None or not str(pid).strip():
             problems.append(f"{label}: missing id")
         elif pid in seen_ids:
             problems.append(f"{label}: duplicate id {pid!r}")
         else:
             seen_ids.add(str(pid))
+
+        for field in ("post_id", "title"):
+            value = promo.get(field)
+            if value is None or not str(value).strip():
+                problems.append(f"{label}: empty {field}")
 
         site = promo.get("site")
         if site not in SITE_CODES:

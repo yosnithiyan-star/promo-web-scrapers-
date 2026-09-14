@@ -7,7 +7,8 @@ card (<a class="package">) on the page:
     - id           (namespaced id derived from the link slug, e.g. "aeon_e564eb";
                      AEON has no native numeric id, so the namespaced id is the
                      dedup key)
-    - post_id      (None — AEON exposes no native id)
+    - post_id      (synthetic — AEON exposes no native id; a stable short hash
+                     of the promo link, matching the namespaced id's tail)
     - site         ("aeon")
     - category      (Thai category name, e.g. "บัตรเครดิตอิออน")
     - category_slugs (the site's own filter key, e.g. ["credit-card"])
@@ -67,7 +68,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_thai_date_range_full
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks, post_id_from_link
 
 DEFAULT_URL = "https://www.aeon.co.th/aeon/promotions/"
 SITE_NAME = "aeon"
@@ -252,7 +253,7 @@ class AeonPromotionScraper(PromotionScraper):
         return {
             "id": make_site_id(SITE_CODE, None, link),
             "site": SITE_NAME,
-            "post_id": None,
+            "post_id": post_id_from_link(link),
             "category": AEON_CATEGORIES.get(slug, slug),
             "category_slugs": [slug],
             "title": title,

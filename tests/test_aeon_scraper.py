@@ -12,6 +12,7 @@ from aeon.aeon_promo_scraper import (
     SITE_CODE,
 )
 from bs4 import BeautifulSoup
+from shared.output import post_id_from_link
 
 BASE_URL = "https://www.aeon.co.th/aeon/promotions/"
 
@@ -94,7 +95,7 @@ class TestBuildPromo:
         p = self._build(soup_packages["insurance-big-care-counter"], "insurance")
         assert p["site"] == "aeon"
         assert p["id"].startswith(f"{SITE_CODE}_")  # namespaced id
-        assert p["post_id"] is None  # AEON has no native id
+        assert p["post_id"] == post_id_from_link(p["link"])  # synthetic from link hash
         assert p["category"] == "ประกันภัย"
         assert p["category_slugs"] == ["insurance"]
         assert p["title"] == "ประกันบิ๊กแคร์"

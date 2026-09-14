@@ -10,6 +10,8 @@ from firstchoice.firstchoice_promo_scraper import (
     extract_image,
     SITE_CODE,
 )
+from shared.output import post_id_from_link
+from bs4 import BeautifulSoup
 
 BASE_URL = "https://www.firstchoice.co.th/promotion"
 
@@ -115,7 +117,7 @@ class TestBuildPromo:
         p = promos[0]
         assert p["site"] == "firstchoice"
         assert p["id"].startswith(f"{SITE_CODE}_")  # namespaced id
-        assert p["post_id"] is None  # no native id
+        assert p["post_id"] == post_id_from_link(p["link"])  # synthetic from link hash
         assert p["category"] == "กิจกรรม"
         assert p["category_slugs"] == []
         assert p["title"] == "กรุงศรีร่วมแจม BTS WORLD TOUR 'ARIRANG' IN BANGKOK"
@@ -266,6 +268,23 @@ class TestFetchDetail:
         assert table["section_title"] == "เงื่อนไขรายการส่งเสริมการขาย"
         assert "ยอดใช้จ่าย | อัตราเงินคืน" in table["text"]
         assert "10,000 บาท | 3%" in table["text"]
+
+    def test_strips_leading_star_from_paragraph(self):
+        from firstchoice.firstchoice_promo_scraper import _split_detail_sections
+        html = (
+            '<div><h2>เงื่อนไข</h2>'
+            '<p>*จำกัดเครดิตเงินคืนสูงสุด 180 บาท / เดือน</p>'
+            '<p>**หมายเหตุเชิงอรรถคู่</p>'
+            '<p>ยอดใช้จ่ายขั้นต่ำ 5,000 บาท*</p></div>'
+        )
+        sections = _split_detail_sections(BeautifulSoup(html, "lxml"))
+        text = sections[0]["text"]
+        # The paragraphs accumulate into one section; the single leading '*'
+        # marker is stripped, mid-text '*' is kept, and leading '**' is a legit
+        # footnote sequence that is NOT stripped.
+        assert text.startswith("จำกัดเครดิตเงินคืน")
+        assert "5,000 บาท*" in text
+        assert "**หมายเหตุเชิงอรรถคู่" in text
 
     def test_captures_main_content_and_conditions_via_wrapper(self, monkeypatch):
         # wrapperPageRMMobileB holds both the main content section and the

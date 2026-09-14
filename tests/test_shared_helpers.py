@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.output import (
     SITE_CODES,
     make_site_id,
+    post_id_from_link,
     content_block,
     normalize_terms,
     number_blocks,
@@ -39,6 +40,16 @@ class TestMakeSiteId:
 
     def test_no_id_without_post_id_or_link(self):
         assert make_site_id("tmn", None) is None
+
+    def test_post_id_from_link_stable_and_matches_make_site_id_tail(self):
+        link = "https://www.truemoney.com/promotion/foo"
+        pid = post_id_from_link(link)
+        assert isinstance(pid, str) and len(pid) == 6
+        assert pid == post_id_from_link(link)
+        assert make_site_id("tmn", None, link) == f"tmn_{pid}"
+
+    def test_post_id_from_link_differs_between_links(self):
+        assert post_id_from_link("https://x/one") != post_id_from_link("https://x/two")
 
 
 class TestContentBlock:
@@ -170,7 +181,7 @@ class TestSaveCsvBlockProjection:
         from shared.output import save_csv
         out = str(tmp_path / "p.csv")
         promos = [{
-            "id": "fcb_x", "site": "firstchoice", "post_id": None,
+            "id": "fcb_x", "site": "firstchoice", "post_id": "ab12cd",
             "category": "กิจกรรม", "category_slugs": [], "title": "t",
             "date_range": "1 ส.ค. 69 - 15 พ.ย. 69", "date_start": "2026-08-01",
             "date_end": "2026-11-15", "link": "https://x/p",
@@ -191,7 +202,7 @@ class TestSaveCsvBlockProjection:
 
 def _valid_promo(**overrides):
     promo = {
-        "id": "fcb_x", "site": "firstchoice", "post_id": None,
+        "id": "fcb_x", "site": "firstchoice", "post_id": "ab12cd",
         "category": "กิจกรรม", "category_slugs": [], "title": "t",
         "date_range": "1 ส.ค. 69 - 15 พ.ย. 69", "date_start": "2026-08-01",
         "date_end": "2026-11-15", "link": "https://x/p",
@@ -214,6 +225,17 @@ class TestValidatePromos:
         del bad["date_start"]
         problems = validate_promos([bad])
         assert any("missing fields" in p and "date_start" in p for p in problems)
+
+    def test_empty_title_reported(self):
+        assert any("empty title" in p for p in validate_promos([_valid_promo(title="")]))
+        assert any("empty title" in p for p in validate_promos([_valid_promo(title="   ")]))
+
+    def test_empty_post_id_reported(self):
+        assert any("empty post_id" in p for p in validate_promos([_valid_promo(post_id="")]))
+        assert any("empty post_id" in p for p in validate_promos([_valid_promo(post_id=None)]))
+
+    def test_empty_id_reported(self):
+        assert any("missing id" in p for p in validate_promos([_valid_promo(id="  ")]))
 
     def test_unknown_site_reported(self):
         problems = validate_promos([_valid_promo(site="notasite")])

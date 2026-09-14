@@ -28,8 +28,10 @@ sites use it differently.
 ## Identity
 
 - **Native id / `post_id`** — the id a site exposes itself. TrueMoney and
-  7-Eleven have numeric ids (`236401`, `3711`); AEON and FirstChoice expose
-  **no native id**, so `post_id` is `None`.
+  7-Eleven have numeric ids (`236401`, `3711`); AEON, FirstChoice, and KBJ expose
+  **no native id**, so their `post_id` is a **synthetic** 6-char MD5 of the
+  promo link (`shared.output.post_id_from_link`), matching the namespaced
+  `id`'s tail. `id`, `post_id`, and `title` are always non-empty.
 - **Namespaced `id`** — the cross-site-unique id built by
   `shared.output.make_site_id`: `{site_code}_{native_id}`, or when there is no
   native id, `{site_code}_{6-char MD5 of the canonical link}`. Used for dedup

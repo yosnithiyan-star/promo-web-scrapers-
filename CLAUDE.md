@@ -74,8 +74,11 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
 - `id` is the namespaced, cross-site-unique id (e.g. `tmn_236401`,
   `7el_3711`, `aeon_e564eb`) built by `shared.output.make_site_id`.
 - `post_id` is the site's **native id**: a numeric id for TrueMoney/7-Eleven
-  (e.g. `236401`, `3711`); AEON has no native id, so its `post_id` is `None`
-  and only the namespaced `id` (a slug-derived string) is populated.
+  (e.g. `236401`, `3711`). For sites with no native id (AEON, FirstChoice,
+  KBJ), `post_id` is a **synthetic** stable short hash of the promo link
+  (`shared.output.post_id_from_link`), matching the namespaced `id`'s tail.
+  `id`, `post_id`, and `title` are always non-empty; the run-path validator
+  (`shared.output.validate_promos`) rejects any that are empty.
 - `site` holds the site code (e.g. `truemoney`, `seven_eleven`, `aeon`), the
   key into `shared.output.SITE_CODES`.
 - Dates are ISO `YYYY-MM-DD`. `scraped_at` is `YYYY-MM-DD HH:MM:SS` in GMT+7.

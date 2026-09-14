@@ -6,7 +6,8 @@ Scrapes https://www.kbjcapital.co.th/promotion and extracts, for every promo
 card on the page:
     - id           (namespaced id, e.g. "kbj_jaymart-0-per"; dedup key)
     - site         ("kbj")
-    - post_id      (KBJ has no native id -> None)
+    - post_id      (synthetic — KBJ exposes no native id; a stable short hash of
+                     the promo link, matching the namespaced id's tail)
     - category     (the tag(s) shown on the card, e.g. "สมัครบัตร")
     - category_slugs (empty; the page exposes no filter slugs)
     - title      (promo headline, from h4.card-article-title)
@@ -53,7 +54,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_date_range
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks, post_id_from_link
 
 DEFAULT_URL = "https://www.kbjcapital.co.th/promotion"
 SITE_NAME = "kbj"
@@ -256,7 +257,7 @@ class KbjPromotionScraper(PromotionScraper):
         return {
             "id": make_site_id(SITE_CODE, None, link),
             "site": SITE_NAME,
-            "post_id": None,
+            "post_id": post_id_from_link(link),
             "category": category,
             "category_slugs": [],
             "title": title,
@@ -296,7 +297,7 @@ class KbjPromotionScraper(PromotionScraper):
         return {
             "id": make_site_id(SITE_CODE, None, link),
             "site": SITE_NAME,
-            "post_id": None,
+            "post_id": post_id_from_link(link),
             "category": None,
             "category_slugs": [],
             "title": title,

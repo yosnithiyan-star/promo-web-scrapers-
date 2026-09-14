@@ -7,7 +7,9 @@ card (<div class="promotionContentBox">) on the page:
     - id           (namespaced id derived from the promo link slug, e.g. "fcb_a1b2c3";
                      First Choice has no native numeric id, so the namespaced id is
                      the dedup key)
-    - post_id      (None — First Choice exposes no native id)
+    - post_id      (synthetic — First Choice exposes no native id; a stable
+                     short hash of the promo link, matching the namespaced id's
+                     tail)
     - site         ("firstchoice")
     - category      (the type badge text, e.g. "กิจกรรม", "สมัครบัตร")
     - category_slugs ([] — the page exposes no filter slug)
@@ -65,7 +67,7 @@ from shared.base import PromotionScraper
 from shared.common import fetch_html as _fetch_html, session_get
 from shared.date_parser import parse_date_range
 from shared.detail_fetcher import clean_terms_text
-from shared.output import SITE_CODES, content_block, make_site_id, number_blocks
+from shared.output import SITE_CODES, content_block, make_site_id, number_blocks, post_id_from_link
 
 DEFAULT_URL = "https://www.firstchoice.co.th/promotion"
 SITE_NAME = "firstchoice"
@@ -169,7 +171,13 @@ def _split_detail_sections(container) -> list[dict]:
         if el.name in ("p", "ul", "ol"):
             text = el.get_text(" ", strip=True)
             if text:
-                current_parts.append(text)
+                # Strip a single leading '*' footnote marker (e.g. "*จำกัดเครดิต...")
+                # unless it's the start of a '**'/'***' sequence (those are legit).
+                # Mid-text '*' (e.g. "6,590 บาท*") is a real footnote ref and stays.
+                if text.startswith("*") and not text.startswith("**"):
+                    text = text[1:].strip()
+                if text:
+                    current_parts.append(text)
     flush()
     # Drop an empty title-only lead section.
     return [s for s in sections if s.get("text")]
@@ -317,7 +325,7 @@ class FirstChoicePromotionScraper(PromotionScraper):
         return {
             "id": make_site_id(SITE_CODE, None, link),
             "site": SITE_NAME,
-            "post_id": None,
+            "post_id": post_id_from_link(link),
             "category": category,
             "category_slugs": [],
             "title": title,

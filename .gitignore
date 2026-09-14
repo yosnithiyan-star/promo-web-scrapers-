@@ -8,3 +8,7 @@ raw/
 
 # temporary review / tooling scratch output
 .scratch/
+.codex/
+
+# downloaded browser page captures (investigation fixtures) — not source
+sample_web_elements/

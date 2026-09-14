@@ -182,6 +182,60 @@ class TestBuildPromo:
             "term_detail_3": {"section_title": "ครั้งที่ 2", "content": "ยอดใช้จ่าย | 5%", "type": "conditions"},
         }
 
+    def test_short_detail_dropped_when_contained_in_detail_section(self, scraper, monkeypatch):
+        # When a detail section (e.g. the banner intro) already contains the
+        # card's short detail verbatim, the redundant short_detail block is
+        # dropped and the richer section block stands in for it.
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_detail",
+            lambda link: [{"section_title": "Grab รับโค้ดส่วนลด", "text": "สิทธิพิเศษเฉพาะสมาชิก ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต"}],
+        )
+        promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
+        p = promos[0]
+        # No short_detail block; the containing section block is term_detail_1.
+        assert p["terms"] == {
+            "term_detail_1": {"section_title": "Grab รับโค้ดส่วนลด", "content": "สิทธิพิเศษเฉพาะสมาชิก ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "conditions"},
+        }
+
+    def test_short_detail_kept_when_not_in_detail_section(self, scraper, monkeypatch):
+        # When no detail section contains the short detail, it is kept as its
+        # own block (it adds text not present elsewhere).
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_detail",
+            lambda link: [{"section_title": "เงื่อนไข", "text": "เฉพาะสมาชิกบัตรเครดิต"}],
+        )
+        promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
+        p = promos[0]
+        assert p["terms"] == {
+            "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
+            "term_detail_2": {"section_title": "เงื่อนไข", "content": "เฉพาะสมาชิกบัตรเครดิต", "type": "conditions"},
+        }
+
+    def test_table_section_typed_conditions_table(self, scraper, monkeypatch):
+        # A detail section extracted from a <table> becomes a conditions_table
+        # block, not a plain conditions block.
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.fetch_detail",
+            lambda link: [
+                {"section_title": "เงื่อนไข", "text": "เฉพาะสมาชิกบัตรเครดิต"},
+                {"section_title": "รางวัล", "text": "ยอดใช้จ่าย | 3%", "from_table": True},
+            ],
+        )
+        promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
+        p = promos[0]
+        assert p["terms"]["term_detail_2"]["type"] == "conditions"
+        assert p["terms"]["term_detail_3"]["type"] == "conditions_table"
+        assert p["terms"]["term_detail_3"]["content"] == "ยอดใช้จ่าย | 3%"
+
 
 class TestFetchDetail:
     def test_splits_detail_into_section_blocks(self, monkeypatch):
@@ -198,13 +252,18 @@ class TestFetchDetail:
         )
         sections = fetch_detail("https://www.firstchoice.co.th/promotion/x")
         assert isinstance(sections, list)
-        assert len(sections) == 1
-        s = sections[0]
-        assert s["section_title"] == "เงื่อนไขรายการส่งเสริมการขาย"
-        assert "ลูกค้าบัตรเฟิร์สช้อยส์" in s["text"]
-        # The reward table is flattened into the same section.
-        assert "ยอดใช้จ่าย | อัตราเงินคืน" in s["text"]
-        assert "10,000 บาท | 3%" in s["text"]
+        assert len(sections) == 2
+        # Prose section carries the conditions paragraph, not the table.
+        prose = sections[0]
+        assert prose["section_title"] == "เงื่อนไขรายการส่งเสริมการขาย"
+        assert prose["from_table"] is False
+        assert "ลูกค้าบัตรเฟิร์สช้อยส์" in prose["text"]
+        assert "ยอดใช้จ่าย | อัตราเงินคืน" not in prose["text"]
+        # The table is its own section, flagged as table-derived.
+        table = sections[1]
+        assert table["from_table"] is True
+        assert "ยอดใช้จ่าย | อัตราเงินคืน" in table["text"]
+        assert "10,000 บาท | 3%" in table["text"]
 
     def test_captures_main_content_and_conditions_via_wrapper(self, monkeypatch):
         # wrapperPageRMMobileB holds both the main content section and the
@@ -279,6 +338,47 @@ class TestFetchDetail:
         assert "กรุงศรี วีซ่า" in texts
         assert "มูลค่าแต่ละรางวัลที่ต้องชำระดังนี้" in titles
         assert "ภาษีเงินได้หัก ณ ที่จ่าย" in texts
+
+    def test_captures_banner_intro_section_first(self, monkeypatch):
+        # The promo banner intro (headline + short blurb) lives in a separate
+        # bannerPromotionDetailSection wrapper above the content, outside both
+        # the content wrapper and the conditions section. It must be captured
+        # and ordered before the content sections.
+        page = """
+        <html><body>
+          <section class="bannerPromotionDetailSection">
+            <div class="wrapBannerRow">
+              <div class="wrapTextBannerPromotionDetail">
+                <h6>1 ก.ย. 69 - 31 ธ.ค. 69</h6>
+                <h1>Grab รับโค้ดส่วนลด</h1>
+                <p>สิทธิพิเศษเฉพาะสมาชิกบัตรเครดิตกรุงศรีเฟิร์สช้อยส์ รับโค้ดส่วนลดสุดคุ้ม</p>
+              </div>
+            </div>
+          </section>
+          <div class="wrapperPageRMMobileB">
+            <h2>เงื่อนไขการใช้โค้ดส่วนลด</h2>
+            <p>จำกัดการให้สิทธิพิเศษสำหรับสมาชิก</p>
+          </div>
+        </body></html>
+        """
+        class FakeResp:
+            text = page
+            apparent_encoding = "utf-8"
+            def raise_for_status(self):
+                pass
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.session_get",
+            lambda url, timeout: FakeResp(),
+        )
+        sections = fetch_detail("https://www.firstchoice.co.th/promotion/grab-code-always-on")
+        texts = " ".join(s["text"] or "" for s in sections)
+        # Banner intro captured.
+        assert "สิทธิพิเศษเฉพาะสมาชิกบัตรเครดิตกรุงศรีเฟิร์สช้อยส์" in texts
+        # Banner comes first (before the content section).
+        banner = [s for s in sections if "สิทธิพิเศษเฉพาะสมาชิก" in (s["text"] or "")]
+        content = [s for s in sections if "สมาชิก" in (s["text"] or "") and "สิทธิพิเศษเฉพาะ" not in (s["text"] or "")]
+        assert banner and content
+        assert sections.index(banner[0]) < sections.index(content[0])
 
     def test_empty_when_no_link(self, monkeypatch):
         assert fetch_detail("") == []

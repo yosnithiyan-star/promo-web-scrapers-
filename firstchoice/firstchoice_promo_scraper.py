@@ -76,6 +76,9 @@ SITE_CODE = SITE_CODES[SITE_NAME]
 # detail. Fall back to the condition section alone if the wrapper is absent.
 DETAIL_WRAPPER_SELECTOR = ".wrapperPageRMMobileB"
 DETAIL_TERMS_SELECTOR = ".promotionDetailConditionSection"
+# The promo's banner intro (headline + short blurb) sits in a separate
+# bannerPromotionDetailSection wrapper, outside both of the above.
+DETAIL_BANNER_SELECTOR = ".wrapTextBannerPromotionDetail"
 DETAIL_CONCURRENCY = 8
 
 
@@ -116,9 +119,10 @@ def _split_detail_sections(container) -> list[dict]:
     First Choice renders the whole conditions prose inside one wrapper
     (wrapperPageRMMobileB) with no <section> boundaries — the natural sections
     are delimited by the h2/h3 headings (each heading + its following prose/
-    table is one section). Returns [{section_title, text}] in DOM order. A
-    section's text flattens its headings, paragraphs, lists, and any table so
-    each numbered block carries its full content.
+    table is one section). Returns [{section_title, text, from_table}] in DOM
+    order. A section's text flattens its headings, paragraphs, and lists. Each
+    <table> is emitted as its OWN section with from_table=True, separate from
+    the surrounding prose, so table-derived content is distinguishable.
     """
     if container is None:
         return []
@@ -130,7 +134,16 @@ def _split_detail_sections(container) -> list[dict]:
         nonlocal current_title, current_parts
         text = clean_terms_text(" ".join(current_parts)) if current_parts else None
         if current_title is not None or text:
-            sections.append({"section_title": current_title, "text": text})
+            sections.append({"section_title": current_title, "text": text, "from_table": False})
+        current_title = None
+        current_parts = []
+
+    def flush_table(table):
+        nonlocal current_title, current_parts
+        flush()
+        text = _flatten_table(table)
+        if text:
+            sections.append({"section_title": current_title, "text": text, "from_table": True})
         current_title = None
         current_parts = []
 
@@ -148,7 +161,7 @@ def _split_detail_sections(container) -> list[dict]:
         if el.name == "div":
             table = el.find("table")
             if table:
-                current_parts.append(_flatten_table(table))
+                flush_table(table)
             continue
         if el.name in ("p", "ul", "ol"):
             text = el.get_text(" ", strip=True)
@@ -184,24 +197,22 @@ def fetch_detail(link: str) -> list[dict]:
         return []
     resp.encoding = resp.apparent_encoding
     soup = BeautifulSoup(resp.text, "lxml")
-    # Split the main content wrapper first (content + conditions when they sit
-    # together). Some pages put promotionDetailConditionSection as a top-level
-    # sibling OUTSIDE the wrapper, so capture it separately too and combine in
-    # DOM order — otherwise that entire conditions block is lost.
-    wrappers = []
-    content_wrapper = soup.select_one(DETAIL_WRAPPER_SELECTOR)
-    if content_wrapper is not None:
-        wrappers.append(content_wrapper)
-    condition_section = soup.select_one(DETAIL_TERMS_SELECTOR)
-    if (
-        condition_section is not None
-        and condition_section not in wrappers
-        and not any(w in condition_section.parents for w in wrappers)
-    ):
-        wrappers.append(condition_section)
-    # If neither selector matched, there is nothing to extract.
+    # The detail is spread across up to three sibling/separate wrappers: the
+    # main content wrapper, the conditions section (a sibling OUTSIDE the
+    # wrapper on some pages), and the banner intro. Split each once, dedupe
+    # against already-collected wrappers, and combine in DOM order.
+    wrappers: list = []
+    for selector in (DETAIL_WRAPPER_SELECTOR, DETAIL_TERMS_SELECTOR, DETAIL_BANNER_SELECTOR):
+        el = soup.select_one(selector)
+        if el is None or el in wrappers:
+            continue
+        if any(w in el.parents for w in wrappers):
+            continue  # already inside a collected wrapper
+        wrappers.append(el)
     if not wrappers:
         return []
+    # Order by document position so the banner intro (top of page) comes first.
+    wrappers.sort(key=lambda el: next(i for i, node in enumerate(soup.find_all(True)) if node is el))
     sections: list[dict] = []
     for wrapper in wrappers:
         sections.extend(_split_detail_sections(wrapper))
@@ -278,14 +289,26 @@ class FirstChoicePromotionScraper(PromotionScraper):
         # short_detail block comes first (term_detail_1); the detail page's
         # sections follow, numbered in DOM order.
         terms = []
+        # Stage-1 short detail comes first, unless the detail sections already
+        # carry the same text (the banner intro often includes the card's short
+        # detail verbatim) — then the richer block stands in for it.
+        detail_sections = (self._detail or {}).get(link, []) if fetch_details else []
         if short_detail:
-            terms.append(content_block("สรุปย่อ", short_detail, "short_detail"))
-        if fetch_details:
-            for section in (self._detail or {}).get(link, []):
-                title = section.get("section_title")
+            normalized = clean_terms_text(short_detail)
+            redundant = False
+            for section in detail_sections:
                 text = section.get("text")
-                if text:
-                    terms.append(content_block(title, text, "conditions"))
+                if text and normalized in clean_terms_text(text):
+                    redundant = True
+                    break
+            if not redundant:
+                terms.append(content_block("สรุปย่อ", short_detail, "short_detail"))
+        for section in detail_sections:
+            title = section.get("section_title")
+            text = section.get("text")
+            if text:
+                block_type = "conditions_table" if section.get("from_table") else "conditions"
+                terms.append(content_block(title, text, block_type))
         terms = number_blocks(terms)
 
         return {

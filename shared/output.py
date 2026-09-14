@@ -22,6 +22,7 @@ SITE_CODES = {
     "aeon": "aeon",
     "umayplus": "uma",
     "firstchoice": "fcb",
+    "kbj": "kbj",
 }
 
 
@@ -42,7 +43,7 @@ def make_site_id(site_code: str, post_id, link: str = "") -> str | None:
 
 # Content-block types for the uniform `terms` block list. Stable taxonomy,
 # documented in docs/glossary.md. Order in a promo's `terms` is meaningful.
-BLOCK_TYPES = ("short_detail", "conditions", "reward_tiers", "meta")
+BLOCK_TYPES = ("short_detail", "conditions", "conditions_table", "reward_tiers", "meta")
 
 
 def content_block(section_title: str | None, content: str | None, block_type: str) -> dict:

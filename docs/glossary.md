@@ -59,25 +59,29 @@ sites use it differently.
 - **Content block** — one value of `terms`, `{section_title, content, type}`,
   addressed by its `term_detail_N` key. `content` is clean single-line text
   (`clean_terms_text` output), or `None` if the block carries no text. `type`
-  comes from a stable taxonomy (`short_detail | conditions | reward_tiers |
-  meta`; see **`type` taxonomy**). The `term_detail_N` key is the block's 1-based
-  position — `term_detail_1`, `term_detail_2`, ... — so consumers can address a
-  section by its numbered key (`terms["term_detail_2"]["content"]`); assigned by
-  `shared.output.number_blocks`. For sites whose detail prose has heading
-  structure (e.g. FirstChoice), each h2/h3 section becomes its own numbered
-  block. `section_title` is `None` for a section with no preceding heading.
+  comes from a stable taxonomy (`short_detail | conditions | conditions_table |
+  reward_tiers | meta`; see **`type` taxonomy**). The `term_detail_N` key is the
+  block's 1-based position — `term_detail_1`, `term_detail_2`, ... — so
+  consumers can address a section by its numbered key
+  (`terms["term_detail_2"]["content"]`); assigned by `shared.output.number_blocks`.
+  For sites whose detail prose has heading structure (e.g. FirstChoice), each
+  h2/h3 section becomes its own numbered block. `section_title` is `None` for a
+  section with no preceding heading.
 - **`type` taxonomy** — the allowed content-block types:
   - `short_detail` — stage-1 listing-card short text (e.g. firstchoice `<p>`
     subtitle, AEON card body).
   - `conditions` — the conditions/terms prose from the detail page (stage 2).
-  - `reward_tiers` — structured reward/benefit data flattened to `|`-joined rows,
-    one block per table (e.g. firstchoice spend→cashback).
+  - `conditions_table` — a detail `<table>` flattened to `|`-joined rows, emitted
+    as its own block separate from the surrounding prose. FirstChoice emits one
+    per reward/value table.
+  - `reward_tiers` — (legacy) structured reward/benefit data flattened to
+    `|`-joined rows, one block per table (superseded by `conditions_table`).
   - `meta` — dates, eligibility, download links, other small structured bits.
   Built via `shared.output.content_block`.
 - **Reward table** — a `<table>` in a site's detail content encoding structured
   data (e.g. spend tiers → cashback rates). Flattened to `|`-joined rows of text;
-  in FirstChoice each table is folded into its owning heading-section's numbered
-  block (not a separate reward_tiers block).
+  in FirstChoice each table is emitted as its own `conditions_table` block
+  (not folded into the owning heading-section's prose block).
 - **Design-time advisor** — `tools/analyze_site.py`; given a site's stage-1 and
   stage-2 HTML, heuristically recommends a selector→`type` mapping and flags
   see-more/CSS-clip wrappers, *before* scraper code is written. Pure DOM

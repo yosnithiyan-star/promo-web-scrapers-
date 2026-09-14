@@ -74,8 +74,11 @@ sites use it differently.
   - `conditions_table` — a detail `<table>` flattened to `|`-joined rows, emitted
     as its own block separate from the surrounding prose. FirstChoice emits one
     per reward/value table.
-  - `reward_tiers` — (legacy) structured reward/benefit data flattened to
-    `|`-joined rows, one block per table (superseded by `conditions_table`).
+  - `reward_tiers` — structured reward/benefit data flattened to `|`-joined rows,
+    one block per table. Coexists with `conditions_table`: the design-time
+    advisor (`tools/analyze_site.py`) and the legacy-coercion path
+    (`shared.output.normalize_terms`, `{label: "tables"}`) still emit it, and it
+    stays in `BLOCK_TYPES`.
   - `meta` — dates, eligibility, download links, other small structured bits.
   Built via `shared.output.content_block`.
 - **Reward table** — a `<table>` in a site's detail content encoding structured

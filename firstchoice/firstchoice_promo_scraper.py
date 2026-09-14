@@ -22,8 +22,8 @@ card (<div class="promotionContentBox">) on the page:
 With --details, also includes:
     - published_at / modified_at (None — not exposed by First Choice)
     - terms      (a block list of {section_title, content, type}; stage-1
-                   short_detail block, a conditions block, and one reward_tiers
-                   block per reward/benefit <table>)
+                   short_detail block, a conditions block, and one
+                   conditions_table block per reward/benefit <table>)
 
 Built on shared.PromotionScraper — only the site-specific fetch/extract/build
 logic lives here; dedup, output paths, and the CLI come from the base class.
@@ -140,10 +140,13 @@ def _split_detail_sections(container) -> list[dict]:
 
     def flush_table(table):
         nonlocal current_title, current_parts
+        # The table belongs under the current heading; keep the title for the
+        # table block after the prose is flushed.
+        table_title = current_title
         flush()
         text = _flatten_table(table)
         if text:
-            sections.append({"section_title": current_title, "text": text, "from_table": True})
+            sections.append({"section_title": table_title, "text": text, "from_table": True})
         current_title = None
         current_parts = []
 

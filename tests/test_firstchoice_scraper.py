@@ -259,9 +259,11 @@ class TestFetchDetail:
         assert prose["from_table"] is False
         assert "ลูกค้าบัตรเฟิร์สช้อยส์" in prose["text"]
         assert "ยอดใช้จ่าย | อัตราเงินคืน" not in prose["text"]
-        # The table is its own section, flagged as table-derived.
+        # The table is its own section, flagged as table-derived, and keeps
+        # the heading it was split out from.
         table = sections[1]
         assert table["from_table"] is True
+        assert table["section_title"] == "เงื่อนไขรายการส่งเสริมการขาย"
         assert "ยอดใช้จ่าย | อัตราเงินคืน" in table["text"]
         assert "10,000 บาท | 3%" in table["text"]
 

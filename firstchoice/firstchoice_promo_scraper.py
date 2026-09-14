@@ -184,10 +184,28 @@ def fetch_detail(link: str) -> list[dict]:
         return []
     resp.encoding = resp.apparent_encoding
     soup = BeautifulSoup(resp.text, "lxml")
-    # Prefer the wrapper (content + conditions); fall back to the condition
-    # section alone for pages that lack the content wrapper.
-    container = soup.select_one(DETAIL_WRAPPER_SELECTOR) or soup.select_one(DETAIL_TERMS_SELECTOR)
-    return _split_detail_sections(container)
+    # Split the main content wrapper first (content + conditions when they sit
+    # together). Some pages put promotionDetailConditionSection as a top-level
+    # sibling OUTSIDE the wrapper, so capture it separately too and combine in
+    # DOM order — otherwise that entire conditions block is lost.
+    wrappers = []
+    content_wrapper = soup.select_one(DETAIL_WRAPPER_SELECTOR)
+    if content_wrapper is not None:
+        wrappers.append(content_wrapper)
+    condition_section = soup.select_one(DETAIL_TERMS_SELECTOR)
+    if (
+        condition_section is not None
+        and condition_section not in wrappers
+        and not any(w in condition_section.parents for w in wrappers)
+    ):
+        wrappers.append(condition_section)
+    # If neither selector matched, there is nothing to extract.
+    if not wrappers:
+        return []
+    sections: list[dict] = []
+    for wrapper in wrappers:
+        sections.extend(_split_detail_sections(wrapper))
+    return sections
 
 
 class FirstChoicePromotionScraper(PromotionScraper):

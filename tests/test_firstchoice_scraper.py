@@ -239,6 +239,47 @@ class TestFetchDetail:
         assert "เงื่อนไขรายการส่งเสริมการขาย" in titles  # conditions
         assert any("U CASH" in (s["text"] or "") for s in sections)
 
+    def test_captures_condition_section_sibling_outside_wrapper(self, monkeypatch):
+        # Some pages (e.g. the BTS tour promo) put promotionDetailConditionSection
+        # as a top-level sibling OUTSIDE wrapperPageRMMobileB, not inside it.
+        # fetch_detail must still capture it, else ~14k chars of terms are lost.
+        page = """
+        <html><body>
+          <div class="promotionDetailContentSection">
+            <div class="wrapperPageRMMobileB">
+              <h2>BTS WORLD TOUR 'ARIRANG' IN BANGKOK</h2>
+              <p>ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต</p>
+            </div>
+          </div>
+          <section class="promotionDetailConditionSection">
+            <h2>เงื่อนไขรายการส่งเสริมการขาย</h2>
+            <p>สำหรับลูกค้าบัตรเครดิต กรุงศรี วีซ่า ทุกประเภท</p>
+            <h3>มูลค่าแต่ละรางวัลที่ต้องชำระดังนี้</h3>
+            <p>ผู้โชคดีจะต้องชำระภาษีเงินได้หัก ณ ที่จ่าย</p>
+          </section>
+        </body></html>
+        """
+        class FakeResp:
+            text = page
+            apparent_encoding = "utf-8"
+            def raise_for_status(self):
+                pass
+        monkeypatch.setattr(
+            "firstchoice.firstchoice_promo_scraper.session_get",
+            lambda url, timeout: FakeResp(),
+        )
+        sections = fetch_detail("https://www.firstchoice.co.th/promotion/bts-world-tour-arirang-in-bangkok")
+        titles = [s["section_title"] for s in sections]
+        texts = " ".join(s["text"] or "" for s in sections)
+        # The content wrapper is captured.
+        assert "BTS WORLD TOUR 'ARIRANG' IN BANGKOK" in titles
+        assert "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต" in texts
+        # The sibling conditions section is captured too (currently lost).
+        assert "เงื่อนไขรายการส่งเสริมการขาย" in titles
+        assert "กรุงศรี วีซ่า" in texts
+        assert "มูลค่าแต่ละรางวัลที่ต้องชำระดังนี้" in titles
+        assert "ภาษีเงินได้หัก ณ ที่จ่าย" in texts
+
     def test_empty_when_no_link(self, monkeypatch):
         assert fetch_detail("") == []
 

@@ -21,7 +21,7 @@ from typing import Any, Iterator
 
 from .common import PROXIES, THAILAND_TZ, format_thai_dt
 from .link_identity import canonicalize_link, load_seen_store, save_seen_store
-from .output import save_json, save_csv
+from .output import save_json, save_csv, validate_promos
 
 
 class PromotionScraper(ABC):
@@ -171,6 +171,13 @@ class PromotionScraper(ABC):
         elapsed = time.time() - start
 
         print(f"Found {len(promos)} promotions in {elapsed:.1f}s", file=sys.stderr)
+
+        problems = validate_promos(promos)
+        if problems:
+            print(f"Validation FAILED for {self.SITE_NAME}: {len(problems)} problem(s):", file=sys.stderr)
+            for p in problems:
+                print(f"  - {p}", file=sys.stderr)
+            raise SystemExit(1)
 
         if fmt == "csv":
             save_csv(promos, out_path)

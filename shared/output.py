@@ -99,6 +99,69 @@ def normalize_terms(value):
     return {}
 
 
+def validate_promos(promos: list[dict]) -> list[str]:
+    """Validate a scrape's output against the shared schema; return problems.
+
+    Each problem is a human-readable string. An empty list means the output is
+    well-formed. Called at the end of every scrape so a site structure change
+    that starts producing malformed output fails loudly instead of silently
+    writing bad data. This is a drift check on the *shape* of the output, not a
+    content-quality check.
+    """
+    problems: list[str] = []
+    required = set(PROMO_FIELDNAMES)
+    seen_ids: set[str] = set()
+
+    for i, promo in enumerate(promos):
+        label = f"promo[{i}]"
+        if not isinstance(promo, dict):
+            problems.append(f"{label}: not an object ({type(promo).__name__})")
+            continue
+        missing = required - set(promo.keys())
+        if missing:
+            problems.append(f"{label}: missing fields {sorted(missing)}")
+
+        pid = promo.get("id")
+        if pid is None or not str(pid):
+            problems.append(f"{label}: missing id")
+        elif pid in seen_ids:
+            problems.append(f"{label}: duplicate id {pid!r}")
+        else:
+            seen_ids.add(str(pid))
+
+        site = promo.get("site")
+        if site not in SITE_CODES:
+            problems.append(f"{label}: unknown site {site!r} (expected one of {sorted(SITE_CODES)})")
+
+        for field in ("date_start", "date_end"):
+            value = promo.get(field)
+            if value is None:
+                continue
+            if not (isinstance(value, str) and len(value) == 10 and value[4] == "-" and value[7] == "-"):
+                problems.append(f"{label}: {field} not YYYY-MM-DD: {value!r}")
+        ds, de = promo.get("date_start"), promo.get("date_end")
+        if ds and de and ds > de:
+            problems.append(f"{label}: date_start {ds!r} after date_end {de!r}")
+
+        terms = promo.get("terms")
+        if terms:
+            if not isinstance(terms, dict):
+                problems.append(f"{label}: terms is {type(terms).__name__}, expected dict keyed by term_detail_N")
+            else:
+                for key, block in terms.items():
+                    if not (isinstance(key, str) and key.startswith("term_detail_")):
+                        problems.append(f"{label}: terms key {key!r} not term_detail_N")
+                    if not isinstance(block, dict):
+                        problems.append(f"{label}: terms[{key}] not an object")
+                        continue
+                    if set(block) - {"section_title", "content", "type"}:
+                        problems.append(f"{label}: terms[{key}] unexpected keys {sorted(set(block) - {'section_title','content','type'})}")
+                    if block.get("type") not in BLOCK_TYPES:
+                        problems.append(f"{label}: terms[{key}] type {block.get('type')!r} not in {BLOCK_TYPES}")
+
+    return problems
+
+
 def _ensure_output_dir(path):
     """Ensure parent directory of path exists."""
     out_dir = os.path.dirname(path)

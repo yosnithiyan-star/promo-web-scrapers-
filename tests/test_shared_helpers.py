@@ -12,6 +12,7 @@ from shared.output import (
     normalize_terms,
     number_blocks,
     BLOCK_TYPES,
+    validate_promos,
 )
 from shared.detail_fetcher import clean_terms_text
 
@@ -186,3 +187,66 @@ class TestSaveCsvBlockProjection:
         # The terms cell joins block contents with ';'.
         assert "ข้อ 1 ข้อ 2" in row and "ยอดใช้จ่าย | 3%" in row
         assert ";".join(["ข้อ 1 ข้อ 2", "ยอดใช้จ่าย | 3%"]) in row
+
+
+def _valid_promo(**overrides):
+    promo = {
+        "id": "fcb_x", "site": "firstchoice", "post_id": None,
+        "category": "กิจกรรม", "category_slugs": [], "title": "t",
+        "date_range": "1 ส.ค. 69 - 15 พ.ย. 69", "date_start": "2026-08-01",
+        "date_end": "2026-11-15", "link": "https://x/p",
+        "image": None, "scraped_at": "2026-09-12 00:00:00",
+        "published_at": None, "modified_at": None,
+        "terms": {
+            "term_detail_1": {"section_title": "เงื่อนไข", "content": "ข้อ 1", "type": "conditions"},
+        },
+    }
+    promo.update(overrides)
+    return promo
+
+
+class TestValidatePromos:
+    def test_valid_promo_has_no_problems(self):
+        assert validate_promos([_valid_promo()]) == []
+
+    def test_missing_field_reported(self):
+        bad = _valid_promo()
+        del bad["date_start"]
+        problems = validate_promos([bad])
+        assert any("missing fields" in p and "date_start" in p for p in problems)
+
+    def test_unknown_site_reported(self):
+        problems = validate_promos([_valid_promo(site="notasite")])
+        assert any("unknown site" in p for p in problems)
+
+    def test_duplicate_id_reported(self):
+        problems = validate_promos([_valid_promo(), _valid_promo(id="fcb_x")])
+        assert any("duplicate id" in p for p in problems)
+
+    def test_inverted_dates_reported(self):
+        problems = validate_promos([_valid_promo(date_start="2026-11-16", date_end="2026-11-15")])
+        assert any("date_start" in p and "after date_end" in p for p in problems)
+
+    def test_bad_date_format_reported(self):
+        problems = validate_promos([_valid_promo(date_start="16/11/2026")])
+        assert any("not YYYY-MM-DD" in p for p in problems)
+
+    def test_terms_bad_key_reported(self):
+        terms = {"conditions": {"section_title": None, "content": "x", "type": "conditions"}}
+        problems = validate_promos([_valid_promo(terms=terms)])
+        assert any("term_detail_N" in p for p in problems)
+
+    def test_terms_bad_type_reported(self):
+        terms = {"term_detail_1": {"section_title": None, "content": "x", "type": "tables"}}
+        problems = validate_promos([_valid_promo(terms=terms)])
+        assert any("type" in p and "not in" in p for p in problems)
+
+    def test_non_dict_terms_reported(self):
+        problems = validate_promos([_valid_promo(terms=["x"])])
+        assert any("terms" in p and "expected dict" in p for p in problems)
+
+    def test_non_dict_promo_reported(self):
+        assert any("not an object" in p for p in validate_promos(["not-a-dict"]))
+
+    def test_empty_terms_object_is_fine(self):
+        assert validate_promos([_valid_promo(terms={})]) == []

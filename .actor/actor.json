@@ -1,0 +1,26 @@
+{
+  "actorSpecification": 1,
+  "name": "promo-web-scrapers",
+  "title": "Thai Promo Scraper (Umbrella)",
+  "description": "Scrapes promotions from 6 Thai retail/banking sites (TrueMoney, 7-Eleven, AEON, U-May Plus, First Choice, KBJ Capital) into one uniform dataset.",
+  "version": "0.1",
+  "meta": {
+    "templateId": "python-start",
+    "generatedBy": "apify-actorization"
+  },
+  "dockerfile": "../Dockerfile",
+  "readme": "./README.md",
+  "input": "./input_schema.json",
+  "output": "./output_schema.json",
+  "buildTag": "latest",
+  "secrets": {},
+  "store": {
+    "isPublic": false,
+    "categories": ["marketing"],
+    "pricing": {
+      "model": "free",
+      "pricingInfo": "Free to run under your Apify usage."
+    }
+  },
+  "minMemoryMbytes": 512
+}

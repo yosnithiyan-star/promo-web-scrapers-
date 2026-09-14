@@ -1,0 +1,28 @@
+{
+  "title": "Thai Promo Scraper (Umbrella)",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "details": {
+      "title": "Fetch details",
+      "type": "boolean",
+      "description": "Fetch each promo's detail page for terms, published_at, and modified_at. Adds per-promo requests and runtime.",
+      "default": false,
+      "editor": "checkbox"
+    },
+    "sites": {
+      "title": "Sites",
+      "type": "object",
+      "description": "Enable or disable individual sites. Omitted keys default to enabled.",
+      "default": {
+        "truemoney": true,
+        "seven_eleven": true,
+        "aeon": true,
+        "umayplus": true,
+        "firstchoice": true,
+        "kbj": true
+      },
+      "editor": "json"
+    }
+  }
+}

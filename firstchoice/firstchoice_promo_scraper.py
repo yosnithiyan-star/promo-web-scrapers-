@@ -307,11 +307,11 @@ class FirstChoicePromotionScraper(PromotionScraper):
             if not redundant:
                 terms.append(content_block("สรุปย่อ", short_detail, "short_detail"))
         for section in detail_sections:
-            title = section.get("section_title")
+            section_title = section.get("section_title")
             text = section.get("text")
             if text:
                 block_type = "conditions_table" if section.get("from_table") else "conditions"
-                terms.append(content_block(title, text, block_type))
+                terms.append(content_block(section_title, text, block_type))
         terms = number_blocks(terms)
 
         return {

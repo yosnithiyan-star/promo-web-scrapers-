@@ -131,6 +131,24 @@ class TestCleanTermsText:
         assert clean_terms_text("   ") is None
         assert clean_terms_text(None) is None
 
+    def test_strips_footnote_asterisks(self):
+        # Trailing, mid-text, and multi-star footnote markers are all removed,
+        # and the gap a mid-text run leaves collapses to a single space.
+        assert clean_terms_text("600 บาท*") == "600 บาท"
+        assert clean_terms_text("รับ 0%*** ของสมนาคุณ") == "รับ 0% ของสมนาคุณ"
+        assert clean_terms_text("บาท**จำกัด") == "บาท จำกัด"
+
+    def test_keeps_asterisk_between_digits(self):
+        # A '*' flanked by digits on both sides is multiplication, not a
+        # footnote marker, so it survives.
+        assert clean_terms_text("2*100") == "2*100"
+        assert clean_terms_text("ราคา 2*100 บาท") == "ราคา 2*100 บาท"
+        # only one digit side -> still a marker, stripped
+        assert clean_terms_text("สูงสุด 5*") == "สูงสุด 5"
+
+    def test_asterisk_only_input_is_none(self):
+        assert clean_terms_text("***") is None
+
 
 class TestDefaultOutputPath:
     """default_output_path must build from the declared OUTPUT_DIR, not from

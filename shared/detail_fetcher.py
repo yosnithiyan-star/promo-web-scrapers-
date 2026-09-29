@@ -19,14 +19,22 @@ JS_REDIRECT_RE = re.compile(
 
 
 def clean_terms_text(text: str | None) -> str | None:
-    """Collapse all whitespace (newlines, runs of spaces) to single spaces.
+    """Collapse all whitespace to single spaces and drop footnote asterisks.
 
     Terms text is scraped with line breaks preserved; downstream consumers
-    want plain single-line text. Returns None for empty/whitespace-only input.
+    want plain single-line text. Marketing source pages glue footnote markers
+    (runs of ``*``) onto the end of phrases — ``600 บาท*``, ``0%***`` — which
+    carry no information once separated from their (usually absent) footnote,
+    so any ``*`` run touching text is removed and the gap it leaves collapsed.
+    A ``*`` sitting directly between two digits is kept: there it reads as
+    multiplication (``2*100``), not a footnote marker. Returns None for
+    empty/whitespace-only input.
     """
     if not text:
         return None
     cleaned = " ".join(text.split())
+    cleaned = re.sub(r"(?<!\d)\*+|\*+(?!\d)", " ", cleaned)
+    cleaned = " ".join(cleaned.split())
     return cleaned if cleaned else None
 
 

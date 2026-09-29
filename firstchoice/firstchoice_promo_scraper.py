@@ -171,13 +171,7 @@ def _split_detail_sections(container) -> list[dict]:
         if el.name in ("p", "ul", "ol"):
             text = el.get_text(" ", strip=True)
             if text:
-                # Strip a single leading '*' footnote marker (e.g. "*จำกัดเครดิต...")
-                # unless it's the start of a '**'/'***' sequence (those are legit).
-                # Mid-text '*' (e.g. "6,590 บาท*") is a real footnote ref and stays.
-                if text.startswith("*") and not text.startswith("**"):
-                    text = text[1:].strip()
-                if text:
-                    current_parts.append(text)
+                current_parts.append(text)
     flush()
     # Drop an empty title-only lead section.
     return [s for s in sections if s.get("text")]

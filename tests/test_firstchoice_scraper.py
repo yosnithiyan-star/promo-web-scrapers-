@@ -279,12 +279,13 @@ class TestFetchDetail:
         )
         sections = _split_detail_sections(BeautifulSoup(html, "lxml"))
         text = sections[0]["text"]
-        # The paragraphs accumulate into one section; the single leading '*'
-        # marker is stripped, mid-text '*' is kept, and leading '**' is a legit
-        # footnote sequence that is NOT stripped.
+        # The paragraphs accumulate into one section. clean_terms_text strips
+        # every footnote-asterisk run (leading, mid-text, and '**'), leaving
+        # clean prose with no dangling markers.
         assert text.startswith("จำกัดเครดิตเงินคืน")
-        assert "5,000 บาท*" in text
-        assert "**หมายเหตุเชิงอรรถคู่" in text
+        assert "*" not in text
+        assert "5,000 บาท" in text
+        assert "หมายเหตุเชิงอรรถคู่" in text
 
     def test_captures_main_content_and_conditions_via_wrapper(self, monkeypatch):
         # wrapperPageRMMobileB holds both the main content section and the

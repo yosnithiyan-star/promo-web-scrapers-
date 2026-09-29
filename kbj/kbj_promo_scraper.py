@@ -200,7 +200,8 @@ class KbjPromotionScraper(PromotionScraper):
         for hp in extract_highlight_promos(html):
             yield {"kind": "highlight", "highlight": hp, "link": hp["link"]}
 
-    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None) -> list[dict]:
+    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None,
+                          max_items: int = 0) -> list[dict]:
         """Fetch all promos' detail terms in parallel when --details is on.
 
         Mirrors AEON: prefetch each promo's conditions by link (concurrent,
@@ -208,16 +209,12 @@ class KbjPromotionScraper(PromotionScraper):
         cache so --details doesn't serialize a request per promo.
         """
         if not fetch_details:
-            return super().scrape_promotions(url, fetch_details, data)
+            return super().scrape_promotions(url, fetch_details, data, max_items)
         url = url or self.DEFAULT_URL
         data = data if data is not None else self.fetch_data(url)
-        links = [
-            item["link"]
-            for item in self.iter_raw_items(data)
-            if item.get("link")
-        ]
-        self._detail_terms = self._prefetch_detail_terms(links)
-        return super().scrape_promotions(url, fetch_details, data)
+        links = [item.get("link") for item in self.iter_raw_items(data)]
+        self._detail_terms = self._prefetch_detail_terms(self._cap_links(links, max_items))
+        return super().scrape_promotions(url, fetch_details, data, max_items)
 
     def _prefetch_detail_terms(self, links: list[str]) -> dict:
         """Fetch each promo's detail-page conditions concurrently, preserving order."""

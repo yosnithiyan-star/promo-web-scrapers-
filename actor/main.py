@@ -48,11 +48,8 @@ SCRAPERS = [
 async def run_scraper(site_key, scraper, fetch_details, max_items=0):
     """Run one scraper, push its promos, and return how many were pushed."""
     start = time.time()
-    promos = scraper.scrape_promotions(fetch_details=fetch_details)
+    promos = scraper.scrape_promotions(fetch_details=fetch_details, max_items=max_items)
     elapsed = time.time() - start
-
-    if max_items > 0:
-        promos = promos[:max_items]
 
     problems = validate_promos(promos)
     if problems:

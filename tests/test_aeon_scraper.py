@@ -123,7 +123,7 @@ class TestBuildPromo:
     def test_details_fetches_terms(self, monkeypatch):
         # --details prefetches each promo's detail page in parallel (via
         # scrape_promotions -> _prefetch_detail_terms -> fetch_terms), caches by
-        # link, then build_promo emits a block list: short_detail + conditions.
+        # link, then build_promo emits a block list: short_detail + detail.
         monkeypatch.setattr(
             "aeon.aeon_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
         )
@@ -139,6 +139,23 @@ class TestBuildPromo:
             assert p["terms"]["term_detail_2"]["content"] == "DETAIL " + p["link"]
         assert "terms_items" not in promos[0]
         assert "card_body" not in promos[0]
+
+    def test_max_items_caps_detail_prefetch(self, monkeypatch):
+        # With max_items, only the first N promos are built and only their
+        # detail pages are fetched.
+        fetched = []
+        monkeypatch.setattr(
+            "aeon.aeon_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
+        monkeypatch.setattr(
+            "aeon.aeon_promo_scraper.fetch_terms",
+            lambda link: fetched.append(link) or "DETAIL " + link,
+        )
+        promos = AeonPromotionScraper().scrape_promotions(BASE_URL, fetch_details=True, max_items=2)
+        assert len(promos) == 2
+        assert sorted(fetched) == sorted(p["link"] for p in promos)
+        for p in promos:
+            assert p["terms"]["term_detail_2"]["content"] == "DETAIL " + p["link"]
 
     def test_no_details_leaves_only_short_detail(self, soup_packages):
         p = self._build(soup_packages["insurance-big-care-counter"], "insurance", details=False)

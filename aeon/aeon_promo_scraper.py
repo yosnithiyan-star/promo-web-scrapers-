@@ -190,7 +190,8 @@ class AeonPromotionScraper(PromotionScraper):
             for package in form.select("a.package"):
                 yield {"package": package, "slug": slug}
 
-    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None) -> list[dict]:
+    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None,
+                          max_items: int = 0) -> list[dict]:
         """Fetch all promos' detail terms in parallel when --details is on.
 
         The base class builds promos one at a time, which would fetch each detail
@@ -200,13 +201,13 @@ class AeonPromotionScraper(PromotionScraper):
         and handed to the base so it is not fetched a second time.
         """
         if not fetch_details:
-            return super().scrape_promotions(url, fetch_details, data)
+            return super().scrape_promotions(url, fetch_details, data, max_items)
 
         url = url or self.DEFAULT_URL
         data = data if data is not None else self.fetch_data(url)
         links = [promo_link(item["package"]) for item in self.iter_raw_items(data)]
-        self._detail_terms = self._prefetch_detail_terms([l for l in links if l])
-        return super().scrape_promotions(url, fetch_details, data)
+        self._detail_terms = self._prefetch_detail_terms(self._cap_links(links, max_items))
+        return super().scrape_promotions(url, fetch_details, data, max_items)
 
     @staticmethod
     def _prefetch_detail_terms(links: list[str]) -> dict:

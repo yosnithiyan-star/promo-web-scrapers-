@@ -32,9 +32,10 @@ python truemoney/truemoney_promo_scraper.py            # or seven_eleven/...
 python truemoney/truemoney_promo_scraper.py --details  # add published/modified/terms
 python truemoney/truemoney_promo_scraper.py --format csv
 python truemoney/truemoney_promo_scraper.py --out path/to/out.json  # override path
+python truemoney/truemoney_promo_scraper.py --details --max-items 3  # quick sample; caps before detail fetches
 ```
 
-Run tests with `python -m pytest tests/ -q` (currently 199 passing).
+Run tests with `python -m pytest tests/ -q` (currently 202 passing).
 
 ## Shared modules (`shared/`)
 

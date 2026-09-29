@@ -246,20 +246,21 @@ class FirstChoicePromotionScraper(PromotionScraper):
             if promo_link(card):
                 yield {"card": card}
 
-    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None) -> list[dict]:
+    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None,
+                          max_items: int = 0) -> list[dict]:
         """Fetch all promos' detail terms and tables in parallel when --details is on.
 
         Mirrors AEON: fetch the listing once, prefetch detail-page content
         concurrently, then let the base loop read from the cache.
         """
         if not fetch_details:
-            return super().scrape_promotions(url, fetch_details, data)
+            return super().scrape_promotions(url, fetch_details, data, max_items)
 
         url = url or self.DEFAULT_URL
         data = data if data is not None else self.fetch_data(url)
         links = [promo_link(item["card"]) for item in self.iter_raw_items(data)]
-        self._detail = self._prefetch_detail([l for l in links if l])
-        return super().scrape_promotions(url, fetch_details, data)
+        self._detail = self._prefetch_detail(self._cap_links(links, max_items))
+        return super().scrape_promotions(url, fetch_details, data, max_items)
 
     @staticmethod
     def _prefetch_detail(links: list[str]) -> dict:

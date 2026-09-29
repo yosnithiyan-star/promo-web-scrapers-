@@ -98,3 +98,37 @@ class TestCrossRunIdentityFlag:
         self._scraper(str(tmp_path), [{"id": "stub_7", "post_id": 7, "link": link}]).scrape_promotions()
         self._scraper(str(tmp_path), [{"id": "stub_7", "post_id": 7, "link": link}]).scrape_promotions()
         assert "renumbered" not in capsys.readouterr().err.lower()
+
+
+class TestMaxItems:
+    """max_items stops the build loop early, so later items are never built."""
+
+    def test_stops_after_max_items(self, tmp_path):
+        from shared.base import PromotionScraper
+
+        built = []
+
+        class _Stub(PromotionScraper):
+            SITE_NAME = "stub"
+            OUTPUT_DIR = str(tmp_path)
+
+            def fetch_data(self, url):
+                return None
+
+            def iter_raw_items(self, data):
+                return iter([{"id": f"stub_{i}", "link": f"https://e.com/{i}"} for i in range(5)])
+
+            def build_promo(self, item, today, fetch_details=False):
+                built.append(item["id"])
+                return item
+
+        promos = _Stub().scrape_promotions(max_items=2)
+        assert [p["id"] for p in promos] == ["stub_0", "stub_1"]
+        assert built == ["stub_0", "stub_1"]
+
+    def test_cap_links_dedups_drops_empty_and_truncates(self):
+        from shared.base import PromotionScraper
+
+        links = ["a", None, "b", "a", "", "c"]
+        assert PromotionScraper._cap_links(links) == ["a", "b", "c"]
+        assert PromotionScraper._cap_links(links, 2) == ["a", "b"]

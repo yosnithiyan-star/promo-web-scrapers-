@@ -56,13 +56,18 @@ class PromotionScraper(ABC):
         it None. Return None to skip the item (filtering happens here).
         """
 
-    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None) -> list[dict]:
+    def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None,
+                          max_items: int = 0) -> list[dict]:
         """Fetch, extract, dedup, and return the list of promo dicts.
 
         `data` optionally carries an already-fetched/parsed page so callers that
         need the raw items before the build loop (e.g. to prefetch detail pages
         in parallel) don't force a second fetch of the listing page. When omitted
         the page is fetched here as usual.
+
+        `max_items` > 0 stops after that many promos, before any later item is
+        built, so no detail page is fetched for promos beyond the cap. Sites that
+        prefetch detail pages cap their prefetch with `_cap_links`.
 
         Duplicates are judged in two ways: intra-run by the namespaced `id`
         (silently the run's own repeats are skipped, matching prior behavior)
@@ -82,6 +87,8 @@ class PromotionScraper(ABC):
         promos = []
         seen_ids = set()
         for item in self.iter_raw_items(data):
+            if max_items > 0 and len(promos) >= max_items:
+                break
             promo = self.build_promo(item, today, fetch_details)
             if promo is None:
                 continue
@@ -101,6 +108,13 @@ class PromotionScraper(ABC):
         self._update_seen_store(site_links, promos)
         save_seen_store(self._seen_store_path(), seen_store)
         return promos
+
+    @staticmethod
+    def _cap_links(links: list, max_items: int = 0) -> list[str]:
+        """Drop empty and repeated links (order kept); keep the first `max_items`
+        when it is > 0. Used by sites that prefetch detail pages by link."""
+        unique = list(dict.fromkeys(link for link in links if link))
+        return unique[:max_items] if max_items > 0 else unique
 
     def _seen_store_path(self) -> str:
         """Path of the cross-run seen-store: <OUTPUT_DIR>/raw/seen.json."""
@@ -155,6 +169,10 @@ class PromotionScraper(ABC):
             "--details", action=argparse.BooleanOptionalAction, default=False,
             help="Include terms, published_at, and modified_at fields. Enabled via --details.",
         )
+        parser.add_argument(
+            "--max-items", type=int, default=0,
+            help="Stop after this many promos (0 = no limit). Useful for a quick sample.",
+        )
         args = parser.parse_args()
 
         fmt = args.format
@@ -167,7 +185,7 @@ class PromotionScraper(ABC):
         print(f"Scraping {args.url}... ({proxies_status})", file=sys.stderr)
 
         start = time.time()
-        promos = self.scrape_promotions(args.url, fetch_details=args.details)
+        promos = self.scrape_promotions(args.url, fetch_details=args.details, max_items=args.max_items)
         elapsed = time.time() - start
 
         print(f"Found {len(promos)} promotions in {elapsed:.1f}s", file=sys.stderr)

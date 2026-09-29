@@ -46,7 +46,7 @@ SCRAPERS = [
 
 
 async def run_scraper(site_key, scraper, fetch_details, max_items=0):
-    """Run one scraper and push its promos."""
+    """Run one scraper, push its promos, and return how many were pushed."""
     start = time.time()
     promos = scraper.scrape_promotions(fetch_details=fetch_details)
     elapsed = time.time() - start
@@ -59,14 +59,17 @@ async def run_scraper(site_key, scraper, fetch_details, max_items=0):
         for p in problems:
             print(f"Validation issue [{site_key}]: {p}", file=sys.stderr)
 
-    for promo in promos:
-        await Actor.push_data(promo)
+    # Push per site so a later site crashing or the run timing out does not
+    # lose promos already scraped.
+    if promos:
+        await Actor.push_data(promos)
 
     print(
         f"[{site_key}] {len(promos)} promos in {elapsed:.1f}s"
         + (f", {len(problems)} validation problem(s)" if problems else ""),
         file=sys.stderr,
     )
+    return len(promos)
 
 
 async def main() -> None:
@@ -86,13 +89,15 @@ async def main() -> None:
             print("No scrapers enabled in input; nothing to do.", file=sys.stderr)
             return
 
+        total = 0
         for scraper in enabled:
             key = scraper.SITE_NAME
             try:
-                await run_scraper(key, scraper, fetch_details, max_items)
+                total += await run_scraper(key, scraper, fetch_details, max_items)
             except Exception as exc:  # one bad site must not kill the run
                 print(f"[{key}] FAILED: {exc}", file=sys.stderr)
-        print(f"Done. {len(enabled)} site(s) scraped.", file=sys.stderr)
+
+        print(f"Done. {len(enabled)} site(s) scraped, {total} promo(s).", file=sys.stderr)
 
 
 if __name__ == "__main__":

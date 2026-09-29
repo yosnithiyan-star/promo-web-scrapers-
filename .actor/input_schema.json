@@ -3,27 +3,14 @@
   "type": "object",
   "schemaVersion": 1,
   "properties": {
-    "details": {
-      "title": "Fetch details",
-      "type": "boolean",
-      "description": "Fetch each promo's detail page for terms, published_at, and modified_at. Adds per-promo requests and runtime.",
-      "default": false,
-      "editor": "checkbox"
-    },
-    "maxItems": {
-      "title": "Max promos per site",
-      "type": "integer",
-      "description": "Maximum number of promos to scrape per site per run. 0 means no limit (scrape all).",
-      "default": 0,
-      "minimum": 0,
-      "editor": "number"
-    },
     "enable_truemoney": {
       "title": "TrueMoney",
       "type": "boolean",
       "description": "Scrape truemoney.com/promotion.",
       "default": true,
-      "editor": "checkbox"
+      "editor": "checkbox",
+      "groupCaption": "Sites",
+      "groupDescription": "Which promo sites to scrape. At least one must be enabled."
     },
     "enable_seven_eleven": {
       "title": "7-Eleven",
@@ -59,6 +46,23 @@
       "description": "Scrape kbjcapital.co.th/promotion.",
       "default": true,
       "editor": "checkbox"
+    },
+    "details": {
+      "title": "Fetch details",
+      "type": "boolean",
+      "description": "Fetch each promo's detail page for full terms, published_at, and modified_at. Adds one request per promo, so it roughly triples runtime (e.g. ~1 min to ~3 min for a full run).",
+      "default": false,
+      "editor": "checkbox",
+      "groupCaption": "Options",
+      "groupDescription": "Scrape options. All fields are optional."
+    },
+    "maxItems": {
+      "title": "Max promos per site",
+      "type": "integer",
+      "description": "Cap the number of promos scraped per site per run, useful for a quick sample. 0 means no limit (scrape every promo on the page).",
+      "default": 0,
+      "minimum": 0,
+      "editor": "number"
     }
   }
 }

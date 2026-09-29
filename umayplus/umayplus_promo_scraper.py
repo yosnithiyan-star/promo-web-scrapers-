@@ -188,10 +188,10 @@ class UmayplusPromotionScraper(PromotionScraper):
             image = urljoin(DEFAULT_URL, img["src"])
 
         detail_terms = (self._detail_terms or {}).get(link) if fetch_details else None
-        # terms is a uniform block list; the string detail terms -> a conditions block.
+        # terms is a uniform block list; the string detail terms -> a detail block.
         terms = []
         if detail_terms:
-            terms.append(content_block("เงื่อนไข", detail_terms, "conditions"))
+            terms.append(content_block("เงื่อนไข", detail_terms, "detail"))
         terms = number_blocks(terms)
 
         return {

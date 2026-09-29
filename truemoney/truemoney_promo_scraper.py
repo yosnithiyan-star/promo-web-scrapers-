@@ -202,9 +202,9 @@ class TrueMoneyPromotionScraper(PromotionScraper):
             published_at, modified_at, terms = fetch_promo_detail(link)
             promo["published_at"] = published_at
             promo["modified_at"] = modified_at
-            # terms is a uniform block list; the string terms -> a conditions block.
+            # terms is a uniform block list; the string terms -> a detail block.
             if terms:
-                promo["terms"] = number_blocks([content_block("เงื่อนไข", terms, "conditions")])
+                promo["terms"] = number_blocks([content_block("เงื่อนไข", terms, "detail")])
             time.sleep(DETAIL_REQUEST_DELAY)
         return promo
 

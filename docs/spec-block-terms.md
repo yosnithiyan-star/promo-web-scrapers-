@@ -2,6 +2,11 @@
 
 Status: Draft. Date: 2026-09-12. Owner: promo-web-scrapers.
 
+> **Update 2026-09-29:** the `type` taxonomy below is superseded. Types now
+> record where text came from on the page — `short_detail` / `detail` /
+> `detail_table` — not its topic; `reward_tiers` and `meta` were never emitted
+> and were dropped. See `docs/glossary.md`.
+
 ## Goal
 
 Unify detail content across all four scrapers into a single structured schema so

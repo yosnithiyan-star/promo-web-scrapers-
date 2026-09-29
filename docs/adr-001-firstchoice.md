@@ -4,6 +4,8 @@
   (see `docs/spec-block-terms.md`). The decisions here still hold except the
   exact `terms` shape in items 3–4, which moved to `{section_title, content,
   type}` blocks (`short_detail` / `conditions` / `reward_tiers` / `meta`).
+  Those type names were later replaced by `short_detail` / `detail` /
+  `detail_table` (2026-09-29; see `docs/glossary.md`).
 - **Related:** prior design decisions live as issues under `.scratch/` (base-class
   extraction, namespaced-id scheme, AEON `{label, text}` terms convention).
 

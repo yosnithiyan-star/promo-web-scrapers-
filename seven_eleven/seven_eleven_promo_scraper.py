@@ -226,10 +226,10 @@ class SevenElevenPromotionScraper(PromotionScraper):
             promo["published_at"] = format_thai_dt_str(created_at)
             promo["modified_at"] = format_thai_dt_str(updated_at)
             detail_th = item.get("detail_th")
-            # terms is a uniform block list; the string terms -> a conditions block.
+            # terms is a uniform block list; the string terms -> a detail block.
             terms_text = extract_text_from_html(detail_th) if detail_th else None
             if terms_text:
-                promo["terms"] = number_blocks([content_block("เงื่อนไข", terms_text, "conditions")])
+                promo["terms"] = number_blocks([content_block("เงื่อนไข", terms_text, "detail")])
 
         return promo
 

@@ -34,9 +34,7 @@ python truemoney/truemoney_promo_scraper.py --format csv
 python truemoney/truemoney_promo_scraper.py --out path/to/out.json  # override path
 ```
 
-Run tests with `python -m pytest tests/ -q` (currently 80 passing: 16 date
-parser + 14 seven_eleven + 17 AEON + 11 TrueMoney + 9 shared_helpers + 1 +
-misc).
+Run tests with `python -m pytest tests/ -q` (currently 199 passing).
 
 ## Shared modules (`shared/`)
 
@@ -86,8 +84,9 @@ Every scraper emits the same fields: `id`, `site`, `post_id`, `category`,
   {section_title, content, type}, ...}` — across all sites, built via
   `shared.output.content_block` and grouped by `shared.output.number_blocks` so
   each section is addressed by its numbered key (`terms["term_detail_2"]`).
-  `type` is one of `short_detail` (stage-1 card text), `conditions` (detail-page
-  prose), `reward_tiers` (a flattened reward `<table>`), `meta`. FirstChoice
+  `type` records where the text came from, not its topic: `short_detail`
+  (stage-1 card text), `detail` (detail-page prose), `detail_table` (a
+  flattened detail `<table>`). `section_title` is cleaned like `content`. FirstChoice
   additionally splits its detail prose at the h2/h3 headings so each heading +
   body is its own numbered block. `content` is clean single-line text
   (`clean_terms_text` output), never raw HTML. Empty object `{}` when `--details`

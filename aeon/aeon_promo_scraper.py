@@ -240,14 +240,14 @@ class AeonPromotionScraper(PromotionScraper):
 
         # terms is a uniform block list (shared.output.content_block): the
         # listing-card body is a stage-1 short_detail block; the detail-page
-        # content (div.newDetails) is a conditions block.
+        # content (div.newDetails) is a detail block.
         terms = []
         if card_body:
             terms.append(content_block("สรุปย่อ", card_body, "short_detail"))
         if fetch_details:
             detail_terms = (self._detail_terms or {}).get(link)
             if detail_terms:
-                terms.append(content_block("ข้อกำหนดและเงื่อนไข", detail_terms, "conditions"))
+                terms.append(content_block("ข้อกำหนดและเงื่อนไข", detail_terms, "detail"))
         terms = number_blocks(terms)
 
         return {

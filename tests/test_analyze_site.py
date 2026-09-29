@@ -49,20 +49,20 @@ LISTING_HTML = """
 
 
 class TestAnalyzeStage2:
-    def test_detects_conditions_and_reward_tiers(self):
+    def test_detects_detail_and_detail_table(self):
         r = analyze_stage2(BeautifulSoup(DETAIL_HTML, "lxml"))
         types = {b["type"] for b in r["content_blocks"]}
-        assert "conditions" in types
-        assert "reward_tiers" in types
+        assert "detail" in types
+        assert "detail_table" in types
 
     def test_detects_see_more_clip(self):
         r = analyze_stage2(BeautifulSoup(DETAIL_HTML, "lxml"))
         assert r["see_more_detected"] is True
         assert any(b["has_clip"] for b in r["content_blocks"])
 
-    def test_reward_tiers_block_has_table(self):
+    def test_detail_table_block_has_table(self):
         r = analyze_stage2(BeautifulSoup(DETAIL_HTML, "lxml"))
-        rt = next(b for b in r["content_blocks"] if b["type"] == "reward_tiers")
+        rt = next(b for b in r["content_blocks"] if b["type"] == "detail_table")
         assert rt["has_table"] is True
 
 

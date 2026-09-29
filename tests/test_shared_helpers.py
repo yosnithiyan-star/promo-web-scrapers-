@@ -54,8 +54,8 @@ class TestMakeSiteId:
 
 class TestContentBlock:
     def test_builds_block(self):
-        b = content_block("เงื่อนไข", "text here", "conditions")
-        assert b == {"section_title": "เงื่อนไข", "content": "text here", "type": "conditions"}
+        b = content_block("เงื่อนไข", "text here", "detail")
+        assert b == {"section_title": "เงื่อนไข", "content": "text here", "type": "detail"}
 
     def test_rejects_unknown_type(self):
         import pytest
@@ -66,14 +66,21 @@ class TestContentBlock:
         for t in BLOCK_TYPES:
             assert content_block(None, "x", t)["type"] == t
 
+    def test_cleans_section_title(self):
+        b = content_block("  **เงื่อนไข\n ทั่วไป* ", "x", "detail")
+        assert b["section_title"] == "เงื่อนไข ทั่วไป"
+
+    def test_blank_section_title_is_none(self):
+        assert content_block(" ** ", "x", "detail")["section_title"] is None
+
 
 class TestNormalizeTerms:
     def test_none_to_empty(self):
         assert normalize_terms(None) == {}
 
-    def test_string_to_conditions_block(self):
+    def test_string_to_detail_block(self):
         assert normalize_terms("สแกน") == {
-            "term_detail_1": {"section_title": None, "content": "สแกน", "type": "conditions"}
+            "term_detail_1": {"section_title": None, "content": "สแกน", "type": "detail"}
         }
 
     def test_empty_string_to_empty(self):
@@ -82,20 +89,20 @@ class TestNormalizeTerms:
     def test_legacy_label_text_to_blocks(self):
         out = normalize_terms([{"label": "detail", "text": "a"}, {"label": "tables", "text": "b"}])
         assert out == {
-            "term_detail_1": {"section_title": "detail", "content": "a", "type": "conditions"},
-            "term_detail_2": {"section_title": "tables", "content": "b", "type": "reward_tiers"},
+            "term_detail_1": {"section_title": "detail", "content": "a", "type": "detail"},
+            "term_detail_2": {"section_title": "tables", "content": "b", "type": "detail_table"},
         }
 
     def test_already_blocks_get_keyed(self):
-        blocks = [content_block(None, "a", "conditions")]
+        blocks = [content_block(None, "a", "detail")]
         out = normalize_terms(blocks)
         assert out == {
-            "term_detail_1": {"section_title": None, "content": "a", "type": "conditions"}
+            "term_detail_1": {"section_title": None, "content": "a", "type": "detail"}
         }
 
     def test_non_dict_items_skipped(self):
         assert normalize_terms(["nope", {"label": "detail", "text": "ok"}]) == {
-            "term_detail_1": {"section_title": "detail", "content": "ok", "type": "conditions"}
+            "term_detail_1": {"section_title": "detail", "content": "ok", "type": "detail"}
         }
 
 
@@ -103,20 +110,20 @@ class TestNumberBlocks:
     def test_keys_blocks_by_term_detail_N(self):
         blocks = [
             content_block("a", "x", "short_detail"),
-            content_block("b", "y", "conditions"),
+            content_block("b", "y", "detail"),
         ]
         out = number_blocks(blocks)
         assert list(out.keys()) == ["term_detail_1", "term_detail_2"]
         assert out["term_detail_1"] == {"section_title": "a", "content": "x", "type": "short_detail"}
-        assert out["term_detail_2"] == {"section_title": "b", "content": "y", "type": "conditions"}
+        assert out["term_detail_2"] == {"section_title": "b", "content": "y", "type": "detail"}
 
     def test_empty_returns_empty_dict(self):
         assert number_blocks([]) == {}
 
     def test_does_not_mutate_input(self):
-        blocks = [content_block(None, "x", "conditions")]
+        blocks = [content_block(None, "x", "detail")]
         number_blocks(blocks)
-        assert blocks[0] == {"section_title": None, "content": "x", "type": "conditions"}
+        assert blocks[0] == {"section_title": None, "content": "x", "type": "detail"}
 
 
 class TestCleanTermsText:
@@ -206,8 +213,8 @@ class TestSaveCsvBlockProjection:
             "image": None, "scraped_at": "2026-09-12 00:00:00",
             "published_at": None, "modified_at": None,
             "terms": {
-                "term_detail_1": {"section_title": "เงื่อนไข", "content": "ข้อ 1 ข้อ 2", "type": "conditions"},
-                "term_detail_2": {"section_title": "รางวัล", "content": "ยอดใช้จ่าย | 3%", "type": "reward_tiers"},
+                "term_detail_1": {"section_title": "เงื่อนไข", "content": "ข้อ 1 ข้อ 2", "type": "detail"},
+                "term_detail_2": {"section_title": "รางวัล", "content": "ยอดใช้จ่าย | 3%", "type": "detail_table"},
             },
         }]
         save_csv(promos, out)
@@ -227,7 +234,7 @@ def _valid_promo(**overrides):
         "image": None, "scraped_at": "2026-09-12 00:00:00",
         "published_at": None, "modified_at": None,
         "terms": {
-            "term_detail_1": {"section_title": "เงื่อนไข", "content": "ข้อ 1", "type": "conditions"},
+            "term_detail_1": {"section_title": "เงื่อนไข", "content": "ข้อ 1", "type": "detail"},
         },
     }
     promo.update(overrides)
@@ -272,7 +279,7 @@ class TestValidatePromos:
         assert any("not YYYY-MM-DD" in p for p in problems)
 
     def test_terms_bad_key_reported(self):
-        terms = {"conditions": {"section_title": None, "content": "x", "type": "conditions"}}
+        terms = {"detail": {"section_title": None, "content": "x", "type": "detail"}}
         problems = validate_promos([_valid_promo(terms=terms)])
         assert any("term_detail_N" in p for p in problems)
 

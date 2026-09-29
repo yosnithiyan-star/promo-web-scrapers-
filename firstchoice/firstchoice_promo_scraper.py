@@ -24,8 +24,8 @@ card (<div class="promotionContentBox">) on the page:
 With --details, also includes:
     - published_at / modified_at (None — not exposed by First Choice)
     - terms      (a block list of {section_title, content, type}; stage-1
-                   short_detail block, a conditions block, and one
-                   conditions_table block per reward/benefit <table>)
+                   short_detail block, a detail block, and one
+                   detail_table block per reward/benefit <table>)
 
 Built on shared.PromotionScraper — only the site-specific fetch/extract/build
 logic lives here; dedup, output paths, and the CLI come from the base class.
@@ -312,7 +312,7 @@ class FirstChoicePromotionScraper(PromotionScraper):
             section_title = section.get("section_title")
             text = section.get("text")
             if text:
-                block_type = "conditions_table" if section.get("from_table") else "conditions"
+                block_type = "detail_table" if section.get("from_table") else "detail"
                 terms.append(content_block(section_title, text, block_type))
         terms = number_blocks(terms)
 

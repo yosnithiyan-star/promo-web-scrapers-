@@ -135,7 +135,7 @@ class TestBuildPromo:
         assert len(promos) == 3
         for p in promos:
             assert p["terms"]["term_detail_1"]["type"] == "short_detail"
-            assert p["terms"]["term_detail_2"]["type"] == "conditions"
+            assert p["terms"]["term_detail_2"]["type"] == "detail"
             assert p["terms"]["term_detail_2"]["content"] == "DETAIL " + p["link"]
         assert "terms_items" not in promos[0]
         assert "card_body" not in promos[0]

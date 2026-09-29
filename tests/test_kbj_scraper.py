@@ -163,7 +163,7 @@ class TestDetailsPipeline:
         assert len(promos) == 2
         assert all(p["terms"] for p in promos)
         p = promos[0]
-        assert p["terms"]["term_detail_1"]["type"] == "conditions"
+        assert p["terms"]["term_detail_1"]["type"] == "detail"
         assert "สงวนสิทธิ์" in p["terms"]["term_detail_1"]["content"]
 
 
@@ -204,7 +204,7 @@ class TestHighlightFallback:
         p = KbjPromotionScraper().build_promo(items[0], date(2026, 9, 14), fetch_details=True)
         assert p["title"] == "ผ่อนของที่ใช่ ได้ที่ Jaymart"
         assert p["link"] == urljoin(BASE_URL, "/promotion/jaymart-0-per")
-        assert p["terms"]["term_detail_1"]["type"] == "conditions"
+        assert p["terms"]["term_detail_1"]["type"] == "detail"
         assert "สงวนสิทธิ์" in p["terms"]["term_detail_1"]["content"]
 
 

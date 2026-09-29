@@ -114,7 +114,7 @@ the namespaced `id` (`fcb_` + link hash). The `category` is the listing badge
 text verbatim (may be a card-network label like "จ่ายได้ทุกที่ VISA", not just a
 category). Dates are abbreviated Thai Buddhist-era strings.
 
-Details (`terms` as a block list: `short_detail` / `conditions` / `reward_tiers`;
+Details (`terms` as a block list: `short_detail` / `detail` / `detail_table`;
 one request per promo) are disabled by default for speed; pass `--details` to
 fetch them in parallel.
 

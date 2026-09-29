@@ -21,7 +21,7 @@ card on the page:
 
 With --details, also fetches each promo's own detail page for:
     - terms        (the promo's full conditions text from
-                     div.detail-condition-content, as a flat conditions block)
+                     div.detail-condition-content, as a flat detail block)
     KBJ exposes no publish/modify meta, so published_at/modified_at stay None.
 
 Built on shared.PromotionScraper — only the site-specific fetch/extract/build
@@ -251,7 +251,7 @@ class KbjPromotionScraper(PromotionScraper):
         if fetch_details:
             terms_text = (self._detail_terms or {}).get(link)
             if terms_text:
-                terms.append(content_block(None, terms_text, "conditions"))
+                terms.append(content_block(None, terms_text, "detail"))
         terms = number_blocks(terms)
 
         return {
@@ -292,7 +292,7 @@ class KbjPromotionScraper(PromotionScraper):
             if fetch_details:
                 dterms = (self._detail_terms or {}).get(link) or detail.get("terms")
                 if dterms:
-                    terms.append(content_block(None, dterms, "conditions"))
+                    terms.append(content_block(None, dterms, "detail"))
         terms = number_blocks(terms)
         return {
             "id": make_site_id(SITE_CODE, None, link),

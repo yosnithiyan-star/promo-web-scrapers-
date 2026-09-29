@@ -162,7 +162,7 @@ class TestBuildPromo:
         p = promos[0]
         assert p["terms"] == {
             "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
-            "term_detail_2": {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "conditions"},
+            "term_detail_2": {"section_title": "เงื่อนไข", "content": "DETAIL " + p["link"], "type": "detail"},
         }
 
     def test_details_sections_numbered_in_order(self, scraper, monkeypatch):
@@ -180,8 +180,8 @@ class TestBuildPromo:
         p = promos[0]
         assert p["terms"] == {
             "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
-            "term_detail_2": {"section_title": "ครั้งที่ 1", "content": "ยอดใช้จ่าย | 3%", "type": "conditions"},
-            "term_detail_3": {"section_title": "ครั้งที่ 2", "content": "ยอดใช้จ่าย | 5%", "type": "conditions"},
+            "term_detail_2": {"section_title": "ครั้งที่ 1", "content": "ยอดใช้จ่าย | 3%", "type": "detail"},
+            "term_detail_3": {"section_title": "ครั้งที่ 2", "content": "ยอดใช้จ่าย | 5%", "type": "detail"},
         }
 
     def test_short_detail_dropped_when_contained_in_detail_section(self, scraper, monkeypatch):
@@ -199,7 +199,7 @@ class TestBuildPromo:
         p = promos[0]
         # No short_detail block; the containing section block is term_detail_1.
         assert p["terms"] == {
-            "term_detail_1": {"section_title": "Grab รับโค้ดส่วนลด", "content": "สิทธิพิเศษเฉพาะสมาชิก ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "conditions"},
+            "term_detail_1": {"section_title": "Grab รับโค้ดส่วนลด", "content": "สิทธิพิเศษเฉพาะสมาชิก ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "detail"},
         }
 
     def test_short_detail_kept_when_not_in_detail_section(self, scraper, monkeypatch):
@@ -216,12 +216,12 @@ class TestBuildPromo:
         p = promos[0]
         assert p["terms"] == {
             "term_detail_1": {"section_title": "สรุปย่อ", "content": "ร่วมสนุก ลุ้นรับบัตรคอนเสิร์ต", "type": "short_detail"},
-            "term_detail_2": {"section_title": "เงื่อนไข", "content": "เฉพาะสมาชิกบัตรเครดิต", "type": "conditions"},
+            "term_detail_2": {"section_title": "เงื่อนไข", "content": "เฉพาะสมาชิกบัตรเครดิต", "type": "detail"},
         }
 
-    def test_table_section_typed_conditions_table(self, scraper, monkeypatch):
-        # A detail section extracted from a <table> becomes a conditions_table
-        # block, not a plain conditions block.
+    def test_table_section_typed_detail_table(self, scraper, monkeypatch):
+        # A detail section extracted from a <table> becomes a detail_table
+        # block, not a plain detail block.
         monkeypatch.setattr(
             "firstchoice.firstchoice_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
         )
@@ -234,8 +234,8 @@ class TestBuildPromo:
         )
         promos = scraper.scrape_promotions(BASE_URL, fetch_details=True)
         p = promos[0]
-        assert p["terms"]["term_detail_2"]["type"] == "conditions"
-        assert p["terms"]["term_detail_3"]["type"] == "conditions_table"
+        assert p["terms"]["term_detail_2"]["type"] == "detail"
+        assert p["terms"]["term_detail_3"]["type"] == "detail_table"
         assert p["terms"]["term_detail_3"]["content"] == "ยอดใช้จ่าย | 3%"
 
 

@@ -7,6 +7,7 @@ import os
 from datetime import datetime
 
 from .common import THAILAND_TZ
+from .detail_fetcher import clean_terms_text
 
 PROMO_FIELDNAMES = [
     "id", "site", "post_id", "category", "category_slugs", "title",
@@ -51,22 +52,29 @@ def make_site_id(site_code: str, post_id, link: str = "") -> str | None:
     return None
 
 
-# Content-block types for the uniform `terms` block list. Stable taxonomy,
-# documented in docs/glossary.md. Order in a promo's `terms` is meaningful.
-BLOCK_TYPES = ("short_detail", "conditions", "conditions_table", "reward_tiers", "meta")
+# Content-block types for the uniform `terms` block list, documented in
+# docs/glossary.md. A type records WHERE on the page the text came from, not
+# what it is about — the topic lives in section_title/content:
+#   short_detail — listing-card text (stage 1)
+#   detail       — detail-page prose (stage 2)
+#   detail_table — a detail-page <table>, flattened to `|`-joined rows
+# Order in a promo's `terms` is meaningful.
+BLOCK_TYPES = ("short_detail", "detail", "detail_table")
 
 
 def content_block(section_title: str | None, content: str | None, block_type: str) -> dict:
     """Build one {section_title, content, type} content block for `terms`.
 
     `content` is the caller's clean single-line text (use clean_terms_text
-    first). `block_type` must be in BLOCK_TYPES. Returns a dict; content may be
-    None for a block that carries no text. The `term_detail` field is stamped by
-    number_blocks(), not here.
+    first). `section_title` is cleaned here, since headings carry the same
+    footnote asterisks and stray whitespace as body text. `block_type` must be
+    in BLOCK_TYPES. Returns a dict; content may be None for a block that
+    carries no text. The `term_detail` field is stamped by number_blocks(),
+    not here.
     """
     if block_type not in BLOCK_TYPES:
         raise ValueError(f"unknown block type: {block_type!r} (allowed: {BLOCK_TYPES})")
-    return {"section_title": section_title, "content": content, "type": block_type}
+    return {"section_title": clean_terms_text(section_title), "content": content, "type": block_type}
 
 
 def number_blocks(blocks: list[dict]) -> dict[str, dict]:
@@ -82,7 +90,7 @@ def number_blocks(blocks: list[dict]) -> dict[str, dict]:
 def normalize_terms(value):
     """Coerce any legacy `terms` shape into a uniform list of content blocks.
 
-    Accepts: None -> []; a plain string -> one `conditions` block; a list of
+    Accepts: None -> []; a plain string -> one `detail` block; a list of
     {label, text} objects -> blocks keyed on label; already-block-list -> as-is.
     Returns an object keyed by term_detail_N; each value is {section_title,
     content, type}. Migration shim so consumers and tests have one entry point
@@ -91,7 +99,7 @@ def normalize_terms(value):
     if value is None:
         return {}
     if isinstance(value, str):
-        return number_blocks([content_block(None, value, "conditions")]) if value else {}
+        return number_blocks([content_block(None, value, "detail")]) if value else {}
     if isinstance(value, list):
         blocks = []
         for item in value:
@@ -102,8 +110,8 @@ def normalize_terms(value):
             elif "text" in item:  # legacy {label, text}
                 label = item.get("label")
                 # Legacy firstchoice emitted {label: "tables"} for reward tables.
-                block_type = "reward_tiers" if label == "tables" else (
-                    label if label in BLOCK_TYPES else "conditions"
+                block_type = "detail_table" if label == "tables" else (
+                    label if label in BLOCK_TYPES else "detail"
                 )
                 blocks.append(content_block(label, item.get("text"), block_type))
         return number_blocks(blocks)

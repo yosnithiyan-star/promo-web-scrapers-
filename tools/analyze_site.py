@@ -8,8 +8,12 @@ This is a *heuristic* tool over the DOM — it does not call an LLM. It flags th
 structure the scraper must extract:
 
   Stage 1 (listing card): title, date_range, optional short_detail.
-  Stage 2 (detail page):  conditions, reward_tiers, and any see-more/CSS-clip
-                          wrapper whose full text is already in the DOM.
+  Stage 2 (detail page):  detail prose, detail_table tables, and any
+                          see-more/CSS-clip wrapper whose full text is
+                          already in the DOM.
+
+Block types record where text sits on the page (see shared.output.BLOCK_TYPES),
+not its topic.
 
 Usage:
     python tools/analyze_site.py <stage1.html> [stage2.html]
@@ -28,13 +32,10 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.common import session_get
 
-# Class-name hints -> block type. Substring match, lowest wins per element.
-# Ordered so specific hints win over generic ones.
+# Class-name hints -> block type. Substring match, first hit wins.
 TYPE_HINTS = [
-    # reward / benefit tables
-    (re.compile(r"reward|benefit|prize|รางวัล", re.I), "reward_tiers"),
-    # conditions / terms
-    (re.compile(r"condition|terms|เงื่อนไข|ข้อกำหนด", re.I), "conditions"),
+    # detail-page content containers (conditions, rewards, terms)
+    (re.compile(r"condition|terms|reward|benefit|prize|เงื่อนไข|ข้อกำหนด|รางวัล", re.I), "detail"),
     # short card summary
     (re.compile(r"short|subtitle|summary|excerpt|สรุป", re.I), "short_detail"),
 ]
@@ -131,18 +132,18 @@ def analyze_stage2(soup: BeautifulSoup) -> dict:
         if text and selector not in seen_selectors and len(text) >= 5:
             blocks.append({
                 "selector": selector,
-                "type": "conditions",
+                "type": "detail",
                 "has_table": has_table,
                 "has_clip": True,
                 "text_len": len(text),
             })
             seen_selectors.add(selector)
-        # A table inside the clip/typed area is a reward_tiers block.
+        # A table inside the clip/typed area is a detail_table block.
         table = el.find("table")
-        if table and not any(b["type"] == "reward_tiers" for b in blocks):
+        if table and not any(b["type"] == "detail_table" for b in blocks):
             blocks.append({
                 "selector": "table",
-                "type": "reward_tiers",
+                "type": "detail_table",
                 "has_table": True,
                 "has_clip": True,
                 "text_len": len(table.find_all("tr")),
@@ -151,7 +152,7 @@ def analyze_stage2(soup: BeautifulSoup) -> dict:
     if not any(b["has_table"] for b in blocks):
         for t in soup.find_all("table")[:1]:
             blocks.append({
-                "selector": "table", "type": "reward_tiers", "has_table": True,
+                "selector": "table", "type": "detail_table", "has_table": True,
                 "has_clip": False, "text_len": len(t.find_all("tr")),
             })
     return {"content_blocks": blocks, "see_more_detected": clip_detected}

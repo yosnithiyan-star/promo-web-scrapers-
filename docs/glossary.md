@@ -60,32 +60,32 @@ sites use it differently.
   keyed blocks by `shared.output.normalize_terms`.
 - **Content block** — one value of `terms`, `{section_title, content, type}`,
   addressed by its `term_detail_N` key. `content` is clean single-line text
-  (`clean_terms_text` output), or `None` if the block carries no text. `type`
-  comes from a stable taxonomy (`short_detail | conditions | conditions_table |
-  reward_tiers | meta`; see **`type` taxonomy**). The `term_detail_N` key is the
+  (`clean_terms_text` output), or `None` if the block carries no text;
+  `section_title` is cleaned the same way. `type` is one of `short_detail |
+  detail | detail_table` (see **`type` taxonomy**). The `term_detail_N` key is the
   block's 1-based position — `term_detail_1`, `term_detail_2`, ... — so
   consumers can address a section by its numbered key
   (`terms["term_detail_2"]["content"]`); assigned by `shared.output.number_blocks`.
   For sites whose detail prose has heading structure (e.g. FirstChoice), each
   h2/h3 section becomes its own numbered block. `section_title` is `None` for a
   section with no preceding heading.
-- **`type` taxonomy** — the allowed content-block types:
+- **`type` taxonomy** — the allowed content-block types. A type records
+  **where on the page** the text came from, not what it is about: a `detail`
+  block may hold conditions, redemption steps, reward tiers, or a merchant
+  list. Read `section_title` + `content` for the topic (the LLM categorization
+  step does this).
   - `short_detail` — stage-1 listing-card short text (e.g. firstchoice `<p>`
     subtitle, AEON card body).
-  - `conditions` — the conditions/terms prose from the detail page (stage 2).
-  - `conditions_table` — a detail `<table>` flattened to `|`-joined rows, emitted
+  - `detail` — prose from the detail page (stage 2).
+  - `detail_table` — a detail `<table>` flattened to `|`-joined rows, emitted
     as its own block separate from the surrounding prose. FirstChoice emits one
-    per reward/value table.
-  - `reward_tiers` — structured reward/benefit data flattened to `|`-joined rows,
-    one block per table. Coexists with `conditions_table`: the design-time
-    advisor (`tools/analyze_site.py`) and the legacy-coercion path
-    (`shared.output.normalize_terms`, `{label: "tables"}`) still emit it, and it
-    stays in `BLOCK_TYPES`.
-  - `meta` — dates, eligibility, download links, other small structured bits.
-  Built via `shared.output.content_block`.
+    per table.
+  Built via `shared.output.content_block`. (Renamed 2026-09-29 from
+  `conditions` / `conditions_table`; the never-emitted `reward_tiers` and
+  `meta` were dropped.)
 - **Reward table** — a `<table>` in a site's detail content encoding structured
   data (e.g. spend tiers → cashback rates). Flattened to `|`-joined rows of text;
-  in FirstChoice each table is emitted as its own `conditions_table` block
+  in FirstChoice each table is emitted as its own `detail_table` block
   (not folded into the owning heading-section's prose block).
 - **Design-time advisor** — `tools/analyze_site.py`; given a site's stage-1 and
   stage-2 HTML, heuristically recommends a selector→`type` mapping and flags

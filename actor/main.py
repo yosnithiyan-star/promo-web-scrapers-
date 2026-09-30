@@ -3,7 +3,11 @@
 Umbrella Apify Actor entrypoint for promo-web-scrapers.
 
 Runs all six site scrapers against their live promotion pages and pushes every
-built promo to the Apify dataset using the shared PROMO_FIELDNAMES schema.
+built promo to the run's default Apify dataset using the shared
+PROMO_FIELDNAMES schema. With the `dailyDataset` input on, each promo is also
+appended to a named dataset `promos-YYYY-MM-DD` (Bangkok date at run start),
+shared by every run of that day, and daily datasets past the keep window are
+dropped.
 
 The site scrapers themselves are untouched: this wrapper calls each
 subclass's `scrape_promotions()` (which fetches, builds, dedups by namespaced
@@ -16,11 +20,13 @@ import asyncio
 import os
 import sys
 import time
+from datetime import datetime, timedelta
 
 from apify import Actor
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from shared.common import THAILAND_TZ  # noqa: E402
 from shared.output import validate_promos  # noqa: E402
 
 from aeon.aeon_promo_scraper import AeonPromotionScraper  # noqa: E402
@@ -44,8 +50,45 @@ SCRAPERS = [
     ("KBJ Capital", KbjPromotionScraper()),
 ]
 
+# Every run of a day can also append to one named dataset, promos-YYYY-MM-DD
+# (Bangkok date), so a downstream reader gets all of that day's runs in one
+# place. Named datasets never expire on their own; older ones are deleted.
+DAILY_PREFIX = "promos-"
+DAILY_KEEP_DAYS = 30
+# Sweeping a week past the cutoff (instead of one day) still catches a day
+# skipped by a missed run.
+DAILY_SWEEP_DAYS = 7
 
-async def run_scraper(site_key, scraper, fetch_details, max_items=0):
+
+def daily_dataset_name(day) -> str:
+    return f"{DAILY_PREFIX}{day.isoformat()}"
+
+
+def expired_daily_names(today) -> list[str]:
+    """Daily dataset names just past the keep window.
+
+    The Actor runs with limited permissions, so it cannot list datasets; it
+    can only reach the named ones it created, by name.
+    """
+    return [
+        daily_dataset_name(today - timedelta(days=DAILY_KEEP_DAYS + offset))
+        for offset in range(1, DAILY_SWEEP_DAYS + 1)
+    ]
+
+
+async def delete_expired_daily_datasets(today) -> None:
+    """Drop each expired daily dataset; a failure is logged and never raised."""
+    for name in expired_daily_names(today):
+        try:
+            # open_dataset creates the dataset if it is missing, so drop is
+            # safe either way.
+            dataset = await Actor.open_dataset(name=name)
+            await dataset.drop()
+        except Exception as exc:  # cleanup must never block the scrape
+            print(f"Daily dataset cleanup failed for {name}: {exc}", file=sys.stderr)
+
+
+async def run_scraper(site_key, scraper, fetch_details, max_items=0, daily=None):
     """Run one scraper, push its promos, and return how many were pushed."""
     start = time.time()
     promos = scraper.scrape_promotions(fetch_details=fetch_details, max_items=max_items)
@@ -60,6 +103,8 @@ async def run_scraper(site_key, scraper, fetch_details, max_items=0):
     # lose promos already scraped.
     if promos:
         await Actor.push_data(promos)
+        if daily is not None:
+            await daily.push_data(promos)
 
     print(
         f"[{site_key}] {len(promos)} promos in {elapsed:.1f}s"
@@ -86,11 +131,19 @@ async def main() -> None:
             print("No scrapers enabled in input; nothing to do.", file=sys.stderr)
             return
 
+        daily = None
+        if actor_input.get("dailyDataset", False):
+            today = datetime.now(THAILAND_TZ).date()
+            daily_name = daily_dataset_name(today)
+            daily = await Actor.open_dataset(name=daily_name)
+            print(f"Also appending to daily dataset {daily_name}", file=sys.stderr)
+            await delete_expired_daily_datasets(today)
+
         total = 0
         for scraper in enabled:
             key = scraper.SITE_NAME
             try:
-                total += await run_scraper(key, scraper, fetch_details, max_items)
+                total += await run_scraper(key, scraper, fetch_details, max_items, daily)
             except Exception as exc:  # one bad site must not kill the run
                 print(f"[{key}] FAILED: {exc}", file=sys.stderr)
 

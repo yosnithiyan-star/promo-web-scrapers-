@@ -63,6 +63,13 @@
       "default": 0,
       "minimum": 0,
       "editor": "number"
+    },
+    "dailyDataset": {
+      "title": "Append to daily dataset",
+      "type": "boolean",
+      "description": "Also append every promo to a named dataset promos-YYYY-MM-DD (Bangkok date), shared by all runs of that day, so a downstream reader gets every run of the day in one place. Daily datasets older than 30 days are deleted. Leave off for ad-hoc test runs.",
+      "default": false,
+      "editor": "checkbox"
     }
   }
 }

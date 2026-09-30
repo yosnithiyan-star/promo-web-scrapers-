@@ -8,6 +8,7 @@ from shared.date_parser import (
     parse_thai_date_range_full,
     parse_gregorian_date_range,
     DATE_RANGE_RE,
+    format_thai_date_range,
 )
 
 
@@ -259,6 +260,25 @@ class TestParseGregorianDateRange:
         start, end = parse_gregorian_date_range("31/02/2026 - 30/09/2026")
         assert start is None
         assert end == "2026-09-30"
+
+
+
+class TestFormatThaiDateRange:
+    """Rendering a date range back into Thai display text."""
+
+    def test_same_year_shows_year_once(self):
+        assert format_thai_date_range(date(2026, 9, 11), date(2026, 9, 30)) == "ตั้งแต่ 11 ก.ย. - 30 ก.ย. 2569"
+
+    def test_cross_year_shows_both_years(self):
+        assert format_thai_date_range(date(2025, 9, 30), date(2026, 12, 30)) == "ตั้งแต่ 30 ก.ย. 2568 - 30 ธ.ค. 2569"
+
+    def test_empty_when_a_date_is_missing(self):
+        assert format_thai_date_range(date(2026, 9, 11), None) == ""
+        assert format_thai_date_range(None, date(2026, 9, 30)) == ""
+
+    def test_round_trips_through_parse_date_range(self):
+        text = format_thai_date_range(date(2026, 7, 1), date(2026, 12, 31), prefix="")
+        assert parse_date_range(text, date(2026, 9, 30)) == ("2026-07-01", "2026-12-31")
 
 
 if __name__ == "__main__":

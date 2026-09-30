@@ -3,7 +3,7 @@
 KBJ Capital Promotion Page Scraper
 ===================================
 Scrapes https://www.kbjcapital.co.th/promotion and extracts, for every promo
-card on the page:
+on the page:
     - id           (namespaced id, e.g. "kbj_jaymart-0-per"; dedup key)
     - site         ("kbj")
     - post_id      (synthetic — KBJ exposes no native id; a stable short hash of
@@ -23,6 +23,12 @@ With --details, also fetches each promo's own detail page for:
     - terms        (the promo's full conditions text from
                      div.detail-condition-content, as a flat detail block)
     KBJ exposes no publish/modify meta, so published_at/modified_at stay None.
+
+The live listing renders its card grid client-side from a POST to the site's
+own web API. The API base URL, bearer token and x-api-key are handed to every
+visitor in the page's RSC flight data, so fetch_data reads them from the page
+on each run (never stored or logged) and pulls the full promo list from the
+API. If that fails it falls back to the few server-rendered highlight promos.
 
 Built on shared.PromotionScraper — only the site-specific fetch/extract/build
 logic lives here; dedup, output paths, and the CLI come from the base class.
@@ -44,15 +50,15 @@ import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date
+from datetime import date, datetime
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from shared.base import PromotionScraper
-from shared.common import fetch_html as _fetch_html, session_get
-from shared.date_parser import parse_date_range
+from shared.common import THAILAND_TZ, fetch_html as _fetch_html, session_get, session_post
+from shared.date_parser import format_thai_date_range, parse_date_range
 from shared.detail_fetcher import clean_terms_text
 from shared.output import SITE_CODES, content_block, make_site_id, number_blocks, post_id_from_link
 
@@ -71,6 +77,81 @@ DETAIL_CONCURRENCY = 8
 # because the "ตั้งแต่ ..." lead token fails to parse, dropping date_start.
 DATE_PREFIX_RE = re.compile(r"^\s*ตั้งแต่\s*")
 
+API_PAGE_LIMIT = 100
+API_MAX_PAGES = 20
+
+
+def _flight_text(html: str) -> str:
+    """Join the page's self.__next_f RSC flight chunks into one unescaped string."""
+    flight = re.findall(r'self\.__next_f\.push\(\[1,"(.*?)"\]\)', html, re.S)
+    return "".join(flight).replace('\\"', '"').replace('\\n', '\n')
+
+
+def extract_api_config(html: str) -> dict | None:
+    """Return {apiUrl, apiBearer, apiKey} from the page's flight data, or None."""
+    joined = _flight_text(html)
+    config = {}
+    for key in ("apiUrl", "apiBearer", "apiKey"):
+        m = re.search(rf'"{key}":"([^"]+)"', joined)
+        if not m:
+            return None
+        config[key] = m.group(1)
+    return config
+
+
+def fetch_api_promos(html: str) -> tuple[list[dict], str | None]:
+    """Fetch the full promo list from the site's web API.
+
+    Mirrors the browser's own request (POST {apiUrl}/promotion, paged), using
+    the credentials the page hands to every visitor. Pages until `total` items
+    are collected. Never raises: returns (items, problem), where problem is None
+    on a clean fetch or a short reason to log. Reasons are fixed labels plus at
+    most an exception type name, because exception text and response bodies can
+    echo the request URL or headers, which carry the credentials.
+    """
+    config = extract_api_config(html)
+    if config is None:
+        return [], "config not found on page"
+    headers = {
+        "authorization": f"Bearer {config['apiBearer']}",
+        "x-api-key": config["apiKey"],
+        "origin": "https://www.kbjcapital.co.th",
+        "referer": "https://www.kbjcapital.co.th/",
+    }
+    items: list[dict] = []
+    for page in range(1, API_MAX_PAGES + 1):
+        body = {"page": page, "limit": API_PAGE_LIMIT, "tag_ids": [],
+                "sort_by": "display_date_start", "sort_order": "desc"}
+        try:
+            resp = session_post(f"{config['apiUrl']}/promotion", json=body, headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+        except Exception as exc:
+            return [], f"request failed ({type(exc).__name__})"
+        data = payload.get("data") if isinstance(payload, dict) else None
+        batch = data.get("items") if isinstance(data, dict) else None
+        if not isinstance(batch, list):
+            return [], "returned an unexpected response shape"
+        items.extend(item for item in batch if isinstance(item, dict))
+        total = data.get("total")
+        if not batch or not isinstance(total, int) or len(items) >= total:
+            break
+    else:
+        return items, f"hit the {API_MAX_PAGES}-page cap; list may be incomplete"
+    if not items:
+        return [], "returned no promos"
+    return items, None
+
+
+def api_date(value: str | None) -> date | None:
+    """Convert an API UTC timestamp (Bangkok midnight, e.g. 2026-09-10T17:00Z) to a GMT+7 date."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(THAILAND_TZ).date()
+    except ValueError:
+        return None
+
 
 def extract_image(card) -> str | None:
     """Extract the card thumbnail URL (absolute), or None if absent."""
@@ -87,8 +168,7 @@ def extract_highlight_promos(html: str) -> list[dict]:
     reachable server-side. Each element yields {id, seo_url, title} plus a
     resolved detail link; the card grid's date/tags are not present.
     """
-    flight = re.findall(r'self\.__next_f\.push\(\[1,"(.*?)"\]\)', html, re.S)
-    joined = "".join(flight).replace('\\"', '"').replace('\\n', '\n')
+    joined = _flight_text(html)
     m = re.search(r'"highlightPromotion":(\[\{.*?\}\])', joined, re.S)
     if not m:
         return []
@@ -165,7 +245,7 @@ def fetch_detail_fields(link: str, today: date) -> dict | None:
 
 
 class KbjPromotionScraper(PromotionScraper):
-    """KBJ Capital-specific scraper: server-rendered DOM scraping."""
+    """KBJ Capital-specific scraper: web-API listing, with DOM/highlight fallbacks."""
 
     SITE_NAME = SITE_NAME
     DEFAULT_URL = DEFAULT_URL
@@ -177,16 +257,39 @@ class KbjPromotionScraper(PromotionScraper):
         self._detail_terms = None
 
     def fetch_data(self, url: str):
-        return _fetch_html(url)
+        """Fetch the listing page plus, when reachable, the full API promo list.
 
-    def iter_raw_items(self, html: str):
-        """Yield each promo card on the page.
-
-        The live /promotion listing renders its card grid client-side, so on the
-        live page we fall back to the server-rendered highlight promos from the
-        RSC flight data. Raw items carry either a parsed `card` (full card grid)
-        or a `highlight` dict (title/seo_url only).
+        Returns {"html", "api_items"}; api_items is None when the API gave
+        nothing usable, so iter_raw_items falls back to the page itself. Every
+        fallback, and a partial list, is reported on stderr with its reason.
         """
+        html = _fetch_html(url)
+        api_items, problem = fetch_api_promos(html)
+        if problem and not api_items:
+            print(f"[kbj] promotion API {problem}; falling back to highlight promos only",
+                  file=sys.stderr)
+        elif problem:
+            print(f"[kbj] promotion API {problem}", file=sys.stderr)
+        return {"html": html, "api_items": api_items or None}
+
+    def iter_raw_items(self, data):
+        """Yield each promo on the page.
+
+        `data` is fetch_data's dict or a plain HTML string. Preference order:
+        API items (full list), then a server-rendered card grid, then the
+        highlight promos from the RSC flight data (title/seo_url only).
+        """
+        if isinstance(data, dict):
+            html, api_items = data.get("html") or "", data.get("api_items")
+        else:
+            html, api_items = data, None
+        if api_items:
+            for api in api_items:
+                seo_url = (api.get("seo_url") or "").strip()
+                if seo_url:
+                    yield {"kind": "api", "api": api,
+                           "link": urljoin(DEFAULT_URL, f"/promotion/{seo_url}")}
+            return
         soup = BeautifulSoup(html, "lxml")
         cards = soup.select(CARD_SELECTOR)
         if cards:
@@ -223,34 +326,26 @@ class KbjPromotionScraper(PromotionScraper):
         return {link: term for link, term in zip(links, terms)}
 
     def build_promo(self, item: dict, today, fetch_details: bool = False) -> dict:
-        """Map one KBJ promo card to the standard promo schema."""
+        """Map one KBJ raw item (API item, card, or highlight) to the standard promo schema."""
         link = item["link"]
+        kind = item.get("kind")
+        if kind == "api":
+            fields = self._api_fields(item["api"])
+        elif kind == "highlight":
+            fields = self._highlight_fields(item["highlight"], link, today)
+        else:
+            fields = self._card_fields(item["card"], today)
+        return self._promo(link, fetch_details, **fields)
 
-        if item.get("kind") == "highlight":
-            # Live listing only exposes highlight promos (title/seo_url). Their
-            # date comes from the detail page; fetch it once here.
-            return self._build_highlight(item["highlight"], link, today, fetch_details)
-
-        card = item["card"]
-        title_el = card.select_one("h4.card-article-title")
-        title = title_el.get_text(" ", strip=True) if title_el else ""
-
-        date_el = card.select_one("p.card-article-date")
-        date_range = date_el.get_text(" ", strip=True) if date_el else ""
-        # Strip the leading "ตั้งแต่" so the range's start date is not lost.
-        parse_text = DATE_PREFIX_RE.sub("", date_range)
-        date_start, date_end = parse_date_range(parse_text, today)
-
-        tags = [t.get_text(" ", strip=True) for t in card.select(".tags-text")]
-        category = tags[0] if tags else None
-
+    def _promo(self, link: str, fetch_details: bool, *, title: str, category: str | None,
+               date_range: str, date_start: str | None, date_end: str | None,
+               image: str | None, fallback_terms: str | None = None) -> dict:
+        """Assemble a KBJ promo: the per-kind fields plus what every KBJ promo shares."""
         terms = []
         if fetch_details:
-            terms_text = (self._detail_terms or {}).get(link)
+            terms_text = (self._detail_terms or {}).get(link) or fallback_terms
             if terms_text:
                 terms.append(content_block(None, terms_text, "detail"))
-        terms = number_blocks(terms)
-
         return {
             "id": make_site_id(SITE_CODE, None, link),
             "site": SITE_NAME,
@@ -262,52 +357,65 @@ class KbjPromotionScraper(PromotionScraper):
             "date_start": date_start,
             "date_end": date_end,
             "link": link,
-            "image": extract_image(card),
-            "published_at": None,
-            "modified_at": None,
-            "terms": terms,
-        }
-
-    def _build_highlight(self, highlight: dict, link: str, today, fetch_details: bool) -> dict:
-        """Build a promo from a server-rendered highlight, using its detail page.
-
-        The highlight object only carries id/seo_url/title; fetch the detail
-        page for the date range (and, under --details, the conditions) so the
-        promo is complete rather than date-less.
-        """
-        title = highlight.get("title") or ""
-        image = None
-        date_range = ""
-        date_start = date_end = None
-        terms = []
-        detail = fetch_detail_fields(link, today)
-        if detail:
-            title = detail.get("title") or title
-            date_range = detail.get("date_range") or ""
-            date_start, date_end = detail.get("date_start"), detail.get("date_end")
-            image = detail.get("image")
-            if fetch_details:
-                dterms = (self._detail_terms or {}).get(link) or detail.get("terms")
-                if dterms:
-                    terms.append(content_block(None, dterms, "detail"))
-        terms = number_blocks(terms)
-        return {
-            "id": make_site_id(SITE_CODE, None, link),
-            "site": SITE_NAME,
-            "post_id": post_id_from_link(link),
-            "category": None,
-            "category_slugs": [],
-            "title": title,
-            "date_range": date_range,
-            "date_start": date_start,
-            "date_end": date_end,
-            "link": link,
             "image": image,
             "published_at": None,
             "modified_at": None,
-            "terms": terms,
+            "terms": number_blocks(terms),
         }
 
+    @staticmethod
+    def _api_fields(api: dict) -> dict:
+        """Fields from one web-API item (title, Bangkok dates, first tag, thumbnail)."""
+        start, end = api_date(api.get("display_date_start")), api_date(api.get("display_date_end"))
+        tags = [((t.get("promotion_tag") or {}).get("label") or "").strip()
+                for t in api.get("tags") or [] if isinstance(t, dict)]
+        tags = [t for t in tags if t]
+        thumb = api.get("thumbnail_url")
+        return {
+            "title": " ".join(str(api.get("title") or "").split()),
+            "category": tags[0] if tags else None,
+            "date_range": format_thai_date_range(start, end),
+            "date_start": start.isoformat() if start else None,
+            "date_end": end.isoformat() if end else None,
+            "image": urljoin(DEFAULT_URL, thumb) if isinstance(thumb, str) and thumb else None,
+        }
+
+    @staticmethod
+    def _card_fields(card, today) -> dict:
+        """Fields from one server-rendered card."""
+        title_el = card.select_one("h4.card-article-title")
+        date_el = card.select_one("p.card-article-date")
+        date_range = date_el.get_text(" ", strip=True) if date_el else ""
+        # Strip the leading "ตั้งแต่" so the range's start date is not lost.
+        date_start, date_end = parse_date_range(DATE_PREFIX_RE.sub("", date_range), today)
+        tags = [t.get_text(" ", strip=True) for t in card.select(".tags-text")]
+        return {
+            "title": title_el.get_text(" ", strip=True) if title_el else "",
+            "category": tags[0] if tags else None,
+            "date_range": date_range,
+            "date_start": date_start,
+            "date_end": date_end,
+            "image": extract_image(card),
+        }
+
+    @staticmethod
+    def _highlight_fields(highlight: dict, link: str, today) -> dict:
+        """Fields for a highlight promo, completed from its detail page.
+
+        The highlight object only carries id/seo_url/title, so the detail page
+        supplies the date range, banner image and (as a fallback for the
+        prefetch cache) the conditions.
+        """
+        detail = fetch_detail_fields(link, today) or {}
+        return {
+            "title": detail.get("title") or highlight.get("title") or "",
+            "category": None,
+            "date_range": detail.get("date_range") or "",
+            "date_start": detail.get("date_start"),
+            "date_end": detail.get("date_end"),
+            "image": detail.get("image"),
+            "fallback_terms": detail.get("terms"),
+        }
 
 def main():
     KbjPromotionScraper().main()

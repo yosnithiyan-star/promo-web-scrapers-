@@ -16,6 +16,18 @@ folder with a self-contained scraper.
 - `aeon/aeon_promo_scraper.py` — server-rendered DOM scraping of
   https://www.aeon.co.th/aeon/promotions/. Output to `aeon/raw/<date>/`.
 - `umayplus/` and `firstchoice/` — two more DOM scrapers on the same base class.
+- `kbj/kbj_promo_scraper.py` — KBJ Capital. The listing grid is rendered
+  client-side, so the scraper reads the site's own web-API credentials from the
+  page's RSC flight data on every run (never stored or logged) and POSTs for
+  the full list; on any failure it falls back to the few server-rendered
+  highlight promos and says why on stderr.
+- `actor/main.py` — umbrella Apify Actor running all six scrapers. With the
+  `dailyDataset` input on, every run also appends to the named dataset
+  `promos-YYYY-MM-DD` (Bangkok date at run start); ones older than 30 days are
+  dropped by name.
+- `datahub/` — the DataHub SeaTunnel job config that reads the day's
+  `promos-YYYY-MM-DD` dataset, dedups by `id`, and overwrites that day's Hive
+  partition. Its Apify token is a DataHub project variable, never a literal.
 - `shared/` — reusable modules extracted in Phase 1.
 - `tools/analyze_site.py` — design-time advisor: given a site's stage-1/stage-2
   HTML, heuristically recommends a selector→`terms`-block-type mapping (and
@@ -35,7 +47,7 @@ python truemoney/truemoney_promo_scraper.py --out path/to/out.json  # override p
 python truemoney/truemoney_promo_scraper.py --details --max-items 3  # quick sample; caps before detail fetches
 ```
 
-Run tests with `python -m pytest tests/ -q` (currently 202 passing).
+Run tests with `python -m pytest tests/ -q` (currently 231 passing).
 
 ## Shared modules (`shared/`)
 

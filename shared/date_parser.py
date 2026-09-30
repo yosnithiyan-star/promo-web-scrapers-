@@ -195,3 +195,23 @@ def parse_gregorian_date_range(date_range: str):
     start = to_iso(tokens[0]) if tokens else None
     end = to_iso(tokens[1]) if len(tokens) > 1 else start
     return start, end
+
+
+THAI_MONTH_ABBR = {num: abbr for abbr, num in THAI_MONTH_NUM.items()}
+
+
+def format_thai_date_range(start: date | None, end: date | None, prefix: str = "ตั้งแต่ ") -> str:
+    """Render a validity range as Thai display text, e.g. "ตั้งแต่ 11 ก.ย. - 30 ก.ย. 2569".
+
+    The inverse of parse_date_range: abbreviated months, Buddhist-era years,
+    and the start's year shown only when it differs from the end's. Returns ""
+    when either date is missing.
+    """
+    if not start or not end:
+        return ""
+
+    def fmt(d: date, with_year: bool) -> str:
+        text = f"{d.day} {THAI_MONTH_ABBR[d.month]}"
+        return f"{text} {d.year + 543}" if with_year else text
+
+    return f"{prefix}{fmt(start, start.year != end.year)} - {fmt(end, True)}"

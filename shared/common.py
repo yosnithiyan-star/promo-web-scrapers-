@@ -35,6 +35,11 @@ def session_get(url: str, timeout: int = 20):
     return _SESSION.get(url, timeout=timeout)
 
 
+def session_post(url: str, json=None, headers: dict | None = None, timeout: int = 20):
+    """POST a JSON body via the shared session, honouring the per-request timeout."""
+    return _SESSION.post(url, json=json, headers=headers, timeout=timeout)
+
+
 def format_thai_dt(dt: datetime) -> str:
     """Format a datetime as 'YYYY-MM-DD HH:MM:SS' in GMT+7 (Thailand time)."""
     local_dt = dt.astimezone(THAILAND_TZ)

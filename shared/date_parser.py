@@ -1,6 +1,7 @@
 """Thai Buddhist-calendar date parsing utilities."""
 
 import re
+import sys
 from datetime import date
 
 THAI_MONTHS = (
@@ -40,12 +41,41 @@ def parse_thai_date_token(token: str, today: date):
         return None
 
 
+def _auto_heal_range(start, end, raw: str):
+    """Correct an inverted (end < start) date range and warn on stderr.
+
+    An end that precedes its start means the site typo'd the year on one side —
+    e.g. FirstChoice lists "1 ต.ค. 69 - 31 ธ.ค. 68" where the end year should
+    be 2569 (2026). The start is anchored at the campaign's real beginning, so
+    we align the end's year to the start's rather than blindly swapping, and we
+    surface the correction so it is not silent.
+    """
+    if start is not None and end is not None and end < start:
+        corrected = end.replace(year=start.year)
+        if corrected >= start:
+            print(
+                f"WARN: date range inverted (end {end} < start {start}); "
+                f"assumed end-year typo, corrected to {corrected} — raw: {raw!r}",
+                file=sys.stderr,
+            )
+            return start, corrected
+        # Fallback: if aligning years still inverts, swap the order.
+        print(
+            f"WARN: date range inverted (end {end} < start {start}); swapped — "
+            f"raw: {raw!r}",
+            file=sys.stderr,
+        )
+        return end, start
+    return start, end
+
+
 def parse_date_range(date_range: str, today: date):
     """Convert a raw date_range string into (date_start, date_end) ISO strings.
 
     Open-ended ranges ("...เป็นต้นไป") resolve to a None end date. If the first
     token has no year of its own (e.g. "24 ส.ค. - 23 ก.ย. 69"), it borrows the
-    year from the second token.
+    year from the second token. An inverted range (end < start) is auto-healed
+    (see _auto_heal_range).
     """
     if not date_range:
         return None, None
@@ -63,6 +93,7 @@ def parse_date_range(date_range: str, today: date):
     if not open_ended:
         end = parse_thai_date_token(tokens[1], today) if len(tokens) > 1 else start
 
+    start, end = _auto_heal_range(start, end, date_range)
     return (
         start.isoformat() if start else None,
         end.isoformat() if end else None,
@@ -156,6 +187,7 @@ def parse_thai_date_range_full(date_range: str, today: date):
         elif len(tokens) == 1:
             end = start
 
+    start, end = _auto_heal_range(start, end, date_range)
     return (
         start.isoformat() if start else None,
         end.isoformat() if end else None,

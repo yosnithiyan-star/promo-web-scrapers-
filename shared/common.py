@@ -1,6 +1,7 @@
 """Common configuration: headers, proxy, timezone."""
 
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -29,15 +30,49 @@ _SESSION = requests.Session()
 _SESSION.headers.update(HEADERS)
 _SESSION.proxies = PROXIES if PROXIES else {}
 
+# Transient failures worth retrying: connection drops/timeouts (live marketing
+# sites routinely hiccup) and rate-limit/server errors. A client error like 404
+# will never succeed on retry, so it is excluded.
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+# One initial attempt plus _MAX_RETRIES retries (so 4 attempts total), with one
+# backoff sleep (1s/2s/4s) before each retry.
+_MAX_RETRIES = 3
+_BACKOFF = (1, 2, 4)  # seconds, one per retry
+
+
+def _request_with_retry(method, *args, **kwargs):
+    """Run a session request, retrying transient failures with backoff.
+
+    Retries up to _MAX_RETRIES times with exponential backoff on
+    ConnectionError, Timeout, and HTTP status in _RETRYABLE_STATUS. A
+    non-retryable response (any other status) or a final exhausted retry
+    propagates the response/exception so callers see a normal result.
+    """
+    timeout = kwargs.get("timeout", 20)
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            resp = method(*args, **kwargs)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            if attempt == _MAX_RETRIES:
+                raise
+            time.sleep(_BACKOFF[attempt])
+            continue
+        if resp.status_code in _RETRYABLE_STATUS:
+            if attempt == _MAX_RETRIES:
+                return resp
+            time.sleep(_BACKOFF[attempt])
+            continue
+        return resp
+
 
 def session_get(url: str, timeout: int = 20):
     """GET via the shared session, honouring the per-request timeout."""
-    return _SESSION.get(url, timeout=timeout)
+    return _request_with_retry(_SESSION.get, url, timeout=timeout)
 
 
 def session_post(url: str, json=None, headers: dict | None = None, timeout: int = 20):
     """POST a JSON body via the shared session, honouring the per-request timeout."""
-    return _SESSION.post(url, json=json, headers=headers, timeout=timeout)
+    return _request_with_retry(_SESSION.post, url, json=json, headers=headers, timeout=timeout)
 
 
 def format_thai_dt(dt: datetime) -> str:

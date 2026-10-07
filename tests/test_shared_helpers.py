@@ -3,6 +3,8 @@
 import sys
 import os
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shared.output import (
@@ -297,3 +299,70 @@ class TestValidatePromos:
 
     def test_empty_terms_object_is_fine(self):
         assert validate_promos([_valid_promo(terms={})]) == []
+
+
+class _FakeResp:
+    def __init__(self, status=200):
+        self.status_code = status
+
+
+class TestCommonRetry:
+    """shared/common.py session_get/session_post retry-on-transient behavior."""
+
+    def test_get_retries_then_succeeds(self, monkeypatch):
+        import shared.common as common
+        monkeypatch.setattr(common, "_BACKOFF", (0, 0, 0))
+        calls = []
+
+        def flaky(*a, **k):
+            calls.append(1)
+            if len(calls) < 3:
+                return _FakeResp(status=503)
+            return _FakeResp(status=200)
+
+        monkeypatch.setattr(common._SESSION, "get", flaky)
+        resp = common.session_get("http://x")
+        assert resp.status_code == 200
+        assert len(calls) == 3
+
+    def test_get_gives_up_after_max_retries(self, monkeypatch):
+        import shared.common as common
+        monkeypatch.setattr(common, "_BACKOFF", (0, 0, 0))
+        calls = []
+
+        def always_500(*a, **k):
+            calls.append(1)
+            return _FakeResp(status=500)
+
+        monkeypatch.setattr(common._SESSION, "get", always_500)
+        resp = common.session_get("http://x")
+        assert resp.status_code == 500  # final attempt returned, not raised
+        assert len(calls) == common._MAX_RETRIES + 1
+
+    def test_get_does_not_retry_on_404(self, monkeypatch):
+        import shared.common as common
+        calls = []
+
+        def not_found(*a, **k):
+            calls.append(1)
+            return _FakeResp(status=404)
+
+        monkeypatch.setattr(common._SESSION, "get", not_found)
+        resp = common.session_get("http://x")
+        assert resp.status_code == 404
+        assert len(calls) == 1  # never retried
+
+    def test_get_retries_connection_error_then_raises(self, monkeypatch):
+        import requests
+        import shared.common as common
+        monkeypatch.setattr(common, "_BACKOFF", (0, 0, 0))
+        calls = []
+
+        def conn_err(*a, **k):
+            calls.append(1)
+            raise requests.exceptions.ConnectionError("down")
+
+        monkeypatch.setattr(common._SESSION, "get", conn_err)
+        with pytest.raises(requests.exceptions.ConnectionError):
+            common.session_get("http://x")
+        assert len(calls) == common._MAX_RETRIES + 1

@@ -92,6 +92,25 @@ class TestParseDateRange:
         assert start == "2026-01-01"
         assert end == "2026-01-31"
 
+    def test_inverted_year_typod_end_is_healed(self):
+        """A site year typo (end year before start) is corrected to the start year.
+
+        FirstChoice's Lazada page lists "1 ต.ค. 69 - 31 ธ.ค. 68": the end year
+        2568 (2025) is a typo for 2569 (2026). The end is re-anchored to the
+        start's year rather than blindly swapped.
+        """
+        today = date(2026, 10, 7)
+        start, end = parse_date_range("1 ต.ค. 69 - 31 ธ.ค. 68", today)
+        assert start == "2026-10-01"
+        assert end == "2026-12-31"
+
+    def test_not_inverted_unchanged(self):
+        """A legitimate cross-year range is not altered."""
+        today = date(2026, 9, 7)
+        start, end = parse_date_range("1 ธ.ค. 68 - 31 ม.ค. 69", today)
+        assert start == "2025-12-01"
+        assert end == "2026-01-31"
+
     def test_open_ended_range(self):
         """Test open-ended range (end is None)."""
         today = date(2026, 9, 7)

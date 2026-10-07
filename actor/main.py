@@ -85,7 +85,19 @@ async def delete_expired_daily_datasets(today) -> None:
             dataset = await Actor.open_dataset(name=name)
             await dataset.drop()
         except Exception as exc:  # cleanup must never block the scrape
-            print(f"Daily dataset cleanup failed for {name}: {exc}", file=sys.stderr)
+            Actor.log.warning(f"Daily dataset cleanup failed for {name}: {exc}")
+
+
+# Any site that hits a structural warning (zero promos, validation drift, or an
+# exception) makes the run exit non-zero so Apify marks it FAILED and the log is
+# inspected, instead of the run "succeeding" silently on empty/broken output.
+SITE_ALERTS: list[str] = []
+
+
+def alert(site_key: str, message: str) -> None:
+    """Record a structural alert and log a greppable warning line."""
+    SITE_ALERTS.append(f"[{site_key}] {message}")
+    Actor.log.warning(f"[SCRAPE-ALERT] [{site_key}] {message}")
 
 
 async def run_scraper(site_key, scraper, fetch_details, max_items=0, daily=None):
@@ -94,22 +106,31 @@ async def run_scraper(site_key, scraper, fetch_details, max_items=0, daily=None)
     promos = scraper.scrape_promotions(fetch_details=fetch_details, max_items=max_items)
     elapsed = time.time() - start
 
+    # A structure change most often does not throw — the site still loads but
+    # the selectors match nothing, so the scrape silently returns zero items.
+    # That is the single biggest silent-failure hole, so flag it hard.
+    if not promos:
+        alert(
+            site_key,
+            "0 promos scraped — likely a site structure change (selectors "
+            "matching nothing); review the site and the scraper.",
+        )
+        return 0
+
     problems = validate_promos(promos)
     if problems:
         for p in problems:
-            print(f"Validation issue [{site_key}]: {p}", file=sys.stderr)
+            alert(site_key, f"Validation drift: {p}")
 
     # Push per site so a later site crashing or the run timing out does not
     # lose promos already scraped.
-    if promos:
-        await Actor.push_data(promos)
-        if daily is not None:
-            await daily.push_data(promos)
+    await Actor.push_data(promos)
+    if daily is not None:
+        await daily.push_data(promos)
 
-    print(
+    Actor.log.info(
         f"[{site_key}] {len(promos)} promos in {elapsed:.1f}s"
         + (f", {len(problems)} validation problem(s)" if problems else ""),
-        file=sys.stderr,
     )
     return len(promos)
 
@@ -118,7 +139,11 @@ async def main() -> None:
     async with Actor:
         actor_input = await Actor.get_input() or {}
         fetch_details = bool(actor_input.get("details", False))
-        max_items = int(actor_input.get("maxItems", 0) or 0)
+        try:
+            max_items = int(actor_input.get("maxItems", 0) or 0)
+        except (TypeError, ValueError):
+            Actor.log.warning(f"Invalid maxItems {actor_input.get('maxItems')!r}; using 0")
+            max_items = 0
 
         # Each site has an enable_<key> checkbox in the input schema; a missing
         # value means the site is left enabled (matches the schema default).
@@ -128,7 +153,8 @@ async def main() -> None:
             if actor_input.get(f"enable_{scraper.SITE_NAME}", True)
         ]
         if not enabled:
-            print("No scrapers enabled in input; nothing to do.", file=sys.stderr)
+            Actor.log.warning("No scrapers enabled in input; nothing to do.")
+            await Actor.exit(status_message="No scrapers enabled in input")
             return
 
         daily = None
@@ -136,18 +162,35 @@ async def main() -> None:
             today = datetime.now(THAILAND_TZ).date()
             daily_name = daily_dataset_name(today)
             daily = await Actor.open_dataset(name=daily_name)
-            print(f"Also appending to daily dataset {daily_name}", file=sys.stderr)
+            Actor.log.info(f"Also appending to daily dataset {daily_name}")
             await delete_expired_daily_datasets(today)
 
         total = 0
-        for scraper in enabled:
+        n = len(enabled)
+        for i, scraper in enumerate(enabled, start=1):
             key = scraper.SITE_NAME
+            await Actor.set_status_message(f"Scraping {key}… ({i}/{n} sites)")
             try:
                 total += await run_scraper(key, scraper, fetch_details, max_items, daily)
             except Exception as exc:  # one bad site must not kill the run
-                print(f"[{key}] FAILED: {exc}", file=sys.stderr)
+                Actor.log.error(f"[{key}] EXCEPTION: {exc}")
+                alert(key, f"EXCEPTION: {exc}")
 
-        print(f"Done. {len(enabled)} site(s) scraped, {total} promo(s).", file=sys.stderr)
+        Actor.log.info(f"Done. {n} site(s) scraped, {total} promo(s).")
+        await Actor.set_status_message(f"Done: {total} promos across {n} site(s)")
+
+        # Surface structural warnings as a FAILED run with a visible status
+        # message, so the scheduled run's error state draws attention in the
+        # Apify console instead of quietly "succeeding" on empty/broken output.
+        # One broken site marks the whole run FAILED, but earlier sites' promos
+        # were already pushed, so partial data is preserved.
+        if SITE_ALERTS:
+            message = (
+                f"{len(SITE_ALERTS)} structural alert(s): "
+                + "; ".join(SITE_ALERTS)
+            )
+            Actor.log.warning(message)
+            await Actor.fail(status_message=message)
 
 
 if __name__ == "__main__":

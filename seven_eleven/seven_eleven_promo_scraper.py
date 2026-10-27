@@ -142,7 +142,38 @@ class SevenElevenPromotionScraper(PromotionScraper):
     OUTPUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
     def fetch_data(self, url: str) -> dict:
-        return extract_next_data(fetch_html(url))
+        """Fetch the landing page and every category page, then merge.
+
+        The /promotion landing page embeds only a subset of the promos (the
+        category tabs show more). Each tab in the landing page's `category`
+        section carries an `item_url` pointing at its own category page (e.g.
+        /promotion/sale/). We fetch each category page and overwrite the
+        landing page's section of the same key with that category's full
+        `items` block, so the scrape sees every promo. Category tabs are read
+        from the site itself (not hardcoded), so the scrape self-adapts if
+        7-Eleven adds or renames a category.
+        """
+        merged = extract_next_data(fetch_html(url))
+        category_section = merged.get("props", {}).get("pageProps", {}).get("category", {}).get("items", [])
+        for tab in category_section:
+            if not isinstance(tab, dict):
+                continue
+            item_url = tab.get("item_url")
+            if not item_url:
+                # e.g. the external "All Online" tab has no item_url.
+                continue
+            category_key = item_url.strip("/").split("/")[-1]
+            if not category_key:
+                continue
+            try:
+                category_next = extract_next_data(fetch_html(urljoin(url, item_url)))
+            except (ValueError, json.JSONDecodeError):
+                # A category page that fails to load should not sink the run.
+                continue
+            category_items = category_next.get("props", {}).get("pageProps", {}).get("items", {})
+            if isinstance(category_items, dict) and "items" in category_items:
+                merged["props"]["pageProps"][category_key] = category_items
+        return merged
 
     def iter_raw_items(self, next_data: dict):
         """Yield each buildable promo item, applying 7-Eleven's filtering rules."""

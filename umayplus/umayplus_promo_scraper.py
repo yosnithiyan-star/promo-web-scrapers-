@@ -3,9 +3,10 @@
 umayplus (Krungsri U-May+) Promotion Page Scraper
 =================================================
 Scrapes https://www.umayplus.com/promotion and extracts, for every promo on
-the page, the shared schema fields. The listing is server-rendered HTML (no
-embedded JSON). All promos live on the single /promotion page (pagination
-pages 2+ add nothing), but they appear in two markup variants:
+the page, the shared schema fields. The listing is server-rendered HTML (no embedded JSON). Promos are split
+across pagination pages (the base page plus `?page=2`, `?page=3`, ... carry
+more), which the scraper walks until a page adds nothing. Cards appear in two
+markup variants:
     - carousel cards  <div class="shadow promotion-item">        (title
       h3.promotion-card-text, date div.promotion-date, type div.promotion-type)
     - grid cards       <div class="card rounded-20 shadow mb-4"> (title
@@ -120,27 +121,53 @@ class UmayplusPromotionScraper(PromotionScraper):
     def __init__(self):
         self._detail_terms = None
 
-    def fetch_data(self, url: str) -> str:
-        return fetch_html(url)
+    def fetch_data(self, url: str) -> list[str]:
+        """Fetch the listing and every pagination page, returning the HTML per page.
 
-    def iter_raw_items(self, html: str):
+        The /promotion listing paginates: pages `?page=2`, `?page=3`, ... carry
+        promos the first page does not show. We keep fetching until a page adds
+        no new promo cashcards (or none at all), returning each page's HTML as a
+        list so iter_raw_items parses each page fresh (concatenating the HTML
+        into one document breaks the card containers). A page that fails to load
+        stops the walk so one bad page does not sink the run.
+        """
+        chunks = [fetch_html(url)]
+        seen = set(DETAIL_URL_RE.findall(chunks[0]))
+        for page in range(2, 21):
+            page_url = f"{url}?page={page}"
+            try:
+                html = fetch_html(page_url)
+            except Exception:
+                break
+            cashcards = set(DETAIL_URL_RE.findall(html))
+            new = cashcards - seen
+            if not new:
+                break
+            seen |= cashcards
+            chunks.append(html)
+        return chunks
+
+    def iter_raw_items(self, htmls):
         """Yield each unique promo (by cashcard code) with its card element."""
-        soup = BeautifulSoup(html, "lxml")
+        if isinstance(htmls, str):
+            htmls = [htmls]
         seen = set()
-        for a in soup.select("a[href*=promotiondetail]"):
-            m = DETAIL_URL_RE.search(a.get("href", ""))
-            if not m:
-                continue
-            cashcard = m.group(1)
-            if cashcard in seen:
-                continue
-            card = a.find_parent("div", class_=lambda c: c and (
-                "promotion-item" in c or "card" in c
-            ))
-            if card is None:
-                continue
-            seen.add(cashcard)
-            yield {"cashcard": cashcard, "card": card}
+        for html in htmls:
+            soup = BeautifulSoup(html, "lxml")
+            for a in soup.select("a[href*=promotiondetail]"):
+                m = DETAIL_URL_RE.search(a.get("href", ""))
+                if not m:
+                    continue
+                cashcard = m.group(1)
+                if cashcard in seen:
+                    continue
+                card = a.find_parent("div", class_=lambda c: c and (
+                    "promotion-item" in c or "card" in c
+                ))
+                if card is None:
+                    continue
+                seen.add(cashcard)
+                yield {"cashcard": cashcard, "card": card}
 
     def scrape_promotions(self, url: str | None = None, fetch_details: bool = False, data=None,
                           max_items: int = 0) -> list[dict]:

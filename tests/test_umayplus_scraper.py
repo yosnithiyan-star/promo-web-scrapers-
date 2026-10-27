@@ -79,6 +79,51 @@ class TestIterRawItems:
         cashcards = sorted(i["cashcard"] for i in items)
         assert cashcards == ["2026-060000004", "2026-070000003"]
 
+    def test_iterates_multiple_pages_and_dedups_across_them(self):
+        """A list of page HTML is iterated with one shared cashcard dedup."""
+        page2_card = CAROUSEL_CARD.format(base=BASE_URL).replace(
+            "2026-070000003", "2026-080000005"
+        )
+        items = list(UmayplusPromotionScraper().iter_raw_items([SAMPLE_HTML, page2_card]))
+        cashcards = sorted(i["cashcard"] for i in items)
+        # base has 2, page 2 has 1 new -> 3 total, no dups
+        assert cashcards == ["2026-060000004", "2026-070000003", "2026-080000005"]
+
+
+class TestFetchDataPagination:
+    def test_merges_paginated_promos(self, monkeypatch):
+        """fetch_data walks ?page=N until a page adds no new cashcards."""
+        base_html = "<html><body>" + CAROUSEL_CARD.format(base=BASE_URL) + "</body></html>"
+        page2_html = "<html><body>" + CAROUSEL_CARD.format(base=BASE_URL).replace(
+            "2026-070000003", "2026-080000005"
+        ) + "</body></html>"
+        # page 3 returns only the page-2 cashcard (already seen) -> stop
+        page3_html = "<html><body>" + CAROUSEL_CARD.format(base=BASE_URL).replace(
+            "2026-070000003", "2026-080000005"
+        ) + "</body></html>"
+
+        html_by_url = {
+            BASE_URL: base_html,
+            BASE_URL + "?page=2": page2_html,
+            BASE_URL + "?page=3": page3_html,
+        }
+        monkeypatch.setattr(
+            "umayplus.umayplus_promo_scraper.fetch_html", lambda url: html_by_url[url]
+        )
+        pages = UmayplusPromotionScraper().fetch_data(BASE_URL)
+        assert len(pages) == 2  # base + page 2; page 3 added nothing so walk stopped
+        items = list(UmayplusPromotionScraper().iter_raw_items(pages))
+        cashcards = sorted(i["cashcard"] for i in items)
+        assert cashcards == ["2026-070000003", "2026-080000005"]
+
+    def test_stops_immediately_when_only_one_page(self, monkeypatch):
+        """If every page carries the same cashcards, only the base page is used."""
+        monkeypatch.setattr(
+            "umayplus.umayplus_promo_scraper.fetch_html", lambda url: SAMPLE_HTML
+        )
+        pages = UmayplusPromotionScraper().fetch_data(BASE_URL)
+        assert len(pages) == 1
+
 
 class TestBuildPromo:
     def _scrape(self, fetch_details=False):

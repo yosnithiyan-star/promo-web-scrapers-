@@ -1,0 +1,13 @@
+# Files excluded from the Actor build image. Excludes by directory and by the
+# notebook extension only — deliberately NOT by broad *.txt/*.csv globs, which
+# would wrongly drop requirements.txt.
+docs/
+tests/
+*.ipynb
+.scratch/
+.codex/
+raw/
+__pycache__/
+*.pyc
+.venv/
+.git/

@@ -255,5 +255,84 @@ class TestBuildDetailLink:
         assert link == "https://www.7eleven.co.th/promotion/sale/"
 
 
+class TestFetchDataMultiCategoryMerge:
+    def _page(self, page_props):
+        payload = json.dumps({"props": {"pageProps": page_props}})
+        return f'<script id="__NEXT_DATA__" type="application/json">{payload}</script>'
+
+    def test_merges_category_pages_into_landing_sections(self, monkeypatch):
+        """Category tabs from the landing page pull the full per-category promo list."""
+        landing_props = {
+            "category": {
+                "title_th": None,
+                "items": [
+                    {"id": 40, "title_th": "ลดอย่างแรง", "item_url": "/promotion/sale/"},
+                    {"id": 35, "title_th": "All Member", "item_url": "/promotion/allmember/"},
+                    {"id": 490, "title_th": "All Online", "item_url": None},
+                ],
+            },
+            "sale": {"title_th": "ลดอย่างแรง", "items": [{"id": 269}]},
+            "allmember": {"title_th": "โปรโมชั่นเฉพาะสมาชิก", "items": [{"id": 2348}]},
+        }
+        category_pages = {
+            "/promotion/sale/": {"items": {"title_th": "ลดอย่างแรง", "items": [{"id": 269}, {"id": 32}]}},
+            "/promotion/allmember/": {"items": {"title_th": "โปรโมชั่นเฉพาะสมาชิก", "items": [{"id": 2348}, {"id": 4032}, {"id": 3786}]}},
+        }
+        html_by_url = {
+            BASE_URL: self._page(landing_props),
+            "https://www.7eleven.co.th/promotion/sale/": self._page(category_pages["/promotion/sale/"]),
+            "https://www.7eleven.co.th/promotion/allmember/": self._page(category_pages["/promotion/allmember/"]),
+        }
+
+        monkeypatch.setattr(
+            "seven_eleven.seven_eleven_promo_scraper.fetch_html",
+            lambda url: html_by_url[url],
+        )
+        merged = SevenElevenPromotionScraper().fetch_data(BASE_URL)
+
+        page_props = merged["props"]["pageProps"]
+        # Landing sections are overwritten by the fuller category page lists.
+        assert [i["id"] for i in page_props["sale"]["items"]] == [269, 32]
+        assert [i["id"] for i in page_props["allmember"]["items"]] == [2348, 4032, 3786]
+        # The external All Online tab (no item_url) is ignored, not fetched.
+        assert "allonline" not in page_props
+
+    def test_missing_category_section_is_a_noop(self, monkeypatch):
+        """A landing page with no category tabs yields its own data unchanged."""
+        landing_props = {"sale": {"title_th": "ลดอย่างแรง", "items": [{"id": 269}]}}
+        monkeypatch.setattr(
+            "seven_eleven.seven_eleven_promo_scraper.fetch_html",
+            lambda url: self._page(landing_props),
+        )
+        merged = SevenElevenPromotionScraper().fetch_data(BASE_URL)
+        assert [i["id"] for i in merged["props"]["pageProps"]["sale"]["items"]] == [269]
+
+    def test_broken_category_page_does_not_sink_run(self, monkeypatch):
+        """A category page that fails to parse is skipped, keeping the rest."""
+        landing_props = {
+            "category": {
+                "title_th": None,
+                "items": [
+                    {"id": 40, "title_th": "ลดอย่างแรง", "item_url": "/promotion/sale/"},
+                    {"id": 35, "title_th": "All Member", "item_url": "/promotion/allmember/"},
+                ],
+            },
+            "sale": {"title_th": "ลดอย่างแรง", "items": [{"id": 269}]},
+        }
+        html_by_url = {
+            BASE_URL: self._page(landing_props),
+            "https://www.7eleven.co.th/promotion/sale/": "not valid next data",
+        }
+
+        def fake_fetch(url):
+            return html_by_url.get(url, "not valid next data")
+
+        monkeypatch.setattr("seven_eleven.seven_eleven_promo_scraper.fetch_html", fake_fetch)
+        merged = SevenElevenPromotionScraper().fetch_data(BASE_URL)
+        page_props = merged["props"]["pageProps"]
+        # sale page failed to parse -> landing sale section preserved as-is.
+        assert [i["id"] for i in page_props["sale"]["items"]] == [269]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

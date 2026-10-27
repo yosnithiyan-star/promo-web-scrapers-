@@ -47,7 +47,7 @@ python truemoney/truemoney_promo_scraper.py --out path/to/out.json  # override p
 python truemoney/truemoney_promo_scraper.py --details --max-items 3  # quick sample; caps before detail fetches
 ```
 
-Run tests with `python -m pytest tests/ -q` (currently 231 passing).
+Run tests with `python -m pytest tests/ -q` (currently 255 passing).
 
 ## Shared modules (`shared/`)
 
@@ -64,7 +64,12 @@ Run tests with `python -m pytest tests/ -q` (currently 231 passing).
   `APIFY_PROXY_PASSWORD` is set (unset → direct connection). It connects as
   `groups-BUYPROXIES94952,session-promo_scrapers`, pinning one stable IP from
   the plan's included pool. The password is sent over plain HTTP — never
-  commit, log, or share it.
+  commit, log, or share it. Two sites are exceptions to the pool because they
+  403 every non-Thai IP (the US pool, Apify's servers, and US/SG residential
+  included): KBJ's web API (Cloudflare) and, since 2026-10-24, all of U-May
+  Plus. Those requests pass `thai_ip=True` to `session_get`/`session_post`/
+  `fetch_html` → `groups-RESIDENTIAL,country-TH` (billed per GB; KBJ ~15 KB/run,
+  U-May Plus ~1.3 MB/run with `--details`).
 - `date_parser.py` — Thai Buddhist-era date parsing. Handles ranges
   (`"24 ส.ค. - 23 ก.ย. 69"`), open-ended (`"เป็นต้นไป"`), and the
   `"วันนี้"` (today) keyword. Year-backfill logic lives here (a missing year

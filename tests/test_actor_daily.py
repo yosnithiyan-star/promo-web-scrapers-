@@ -183,6 +183,17 @@ def test_zero_promos_site_flags_run_failed(actor_main, monkeypatch):
     assert len(fake.default) == 5
 
 
+def test_degraded_scrape_flags_run_failed_but_keeps_promos(actor_main, monkeypatch):
+    """A scraper that fell back to partial data (degraded_reason set) fails the run visibly."""
+    fake = _FakeActor({})
+    kbj = next(s for _, s in actor_main.SCRAPERS if s.SITE_NAME == "kbj")
+    monkeypatch.setattr(kbj, "degraded_reason", "promotion API request failed (HTTPError)")
+    _run(actor_main, monkeypatch, fake)
+    assert fake.fail_called is not None
+    assert "[kbj] Degraded scrape: promotion API request failed (HTTPError)" in fake.fail_called[1]
+    assert len(fake.default) == 6
+
+
 def test_status_progress_reported_per_site(actor_main, monkeypatch):
     """Live progress is set once per site and a final Done message."""
     fake = _FakeActor({})

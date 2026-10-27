@@ -122,6 +122,12 @@ async def run_scraper(site_key, scraper, fetch_details, max_items=0, daily=None)
         for p in problems:
             alert(site_key, f"Validation drift: {p}")
 
+    # A scraper that fell back to partial data (e.g. KBJ's API blocked) still
+    # returns promos, so it must say so explicitly to be caught.
+    degraded = getattr(scraper, "degraded_reason", None)
+    if degraded:
+        alert(site_key, f"Degraded scrape: {degraded}")
+
     # Push per site so a later site crashing or the run timing out does not
     # lose promos already scraped.
     await Actor.push_data(promos)

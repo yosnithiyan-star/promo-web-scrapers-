@@ -30,6 +30,19 @@ _SESSION = requests.Session()
 _SESSION.headers.update(HEADERS)
 _SESSION.proxies = PROXIES if PROXIES else {}
 
+# Some sites (KBJ's web API behind Cloudflare, U-May Plus) 403 every non-Thai IP,
+# including the US datacenter pool above and Apify's own servers, so they go
+# through a Thai residential IP instead (billed per GB; use only for small calls).
+TH_RESIDENTIAL_PROXIES = (
+    {"http": f"http://groups-RESIDENTIAL,country-TH:{password}@proxy.apify.com:8000",
+     "https": f"http://groups-RESIDENTIAL,country-TH:{password}@proxy.apify.com:8000"}
+    if password
+    else None
+)
+_TH_SESSION = requests.Session()
+_TH_SESSION.headers.update(HEADERS)
+_TH_SESSION.proxies = TH_RESIDENTIAL_PROXIES if TH_RESIDENTIAL_PROXIES else {}
+
 # Transient failures worth retrying: connection drops/timeouts (live marketing
 # sites routinely hiccup) and rate-limit/server errors. A client error like 404
 # will never succeed on retry, so it is excluded.
@@ -65,14 +78,23 @@ def _request_with_retry(method, *args, **kwargs):
         return resp
 
 
-def session_get(url: str, timeout: int = 20):
-    """GET via the shared session, honouring the per-request timeout."""
-    return _request_with_retry(_SESSION.get, url, timeout=timeout)
+def session_get(url: str, timeout: int = 20, thai_ip: bool = False):
+    """GET via the shared session, honouring the per-request timeout.
+
+    thai_ip=True routes through a Thai residential IP (see TH_RESIDENTIAL_PROXIES).
+    """
+    session = _TH_SESSION if thai_ip else _SESSION
+    return _request_with_retry(session.get, url, timeout=timeout)
 
 
-def session_post(url: str, json=None, headers: dict | None = None, timeout: int = 20):
-    """POST a JSON body via the shared session, honouring the per-request timeout."""
-    return _request_with_retry(_SESSION.post, url, json=json, headers=headers, timeout=timeout)
+def session_post(url: str, json=None, headers: dict | None = None, timeout: int = 20,
+                 thai_ip: bool = False):
+    """POST a JSON body via the shared session, honouring the per-request timeout.
+
+    thai_ip=True routes through a Thai residential IP (see TH_RESIDENTIAL_PROXIES).
+    """
+    session = _TH_SESSION if thai_ip else _SESSION
+    return _request_with_retry(session.post, url, json=json, headers=headers, timeout=timeout)
 
 
 def format_thai_dt(dt: datetime) -> str:
@@ -88,9 +110,9 @@ def format_thai_dt_str(iso_str):
     return format_thai_dt(datetime.fromisoformat(iso_str))
 
 
-def fetch_html(url: str, timeout: int = 20) -> str:
+def fetch_html(url: str, timeout: int = 20, thai_ip: bool = False) -> str:
     """GET a page (via the shared session) and return decoded HTML."""
-    resp = session_get(url, timeout=timeout)
+    resp = session_get(url, timeout=timeout, thai_ip=thai_ip)
     resp.raise_for_status()
     resp.encoding = resp.apparent_encoding
     return resp.text

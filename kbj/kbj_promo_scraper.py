@@ -123,7 +123,9 @@ def fetch_api_promos(html: str) -> tuple[list[dict], str | None]:
         body = {"page": page, "limit": API_PAGE_LIMIT, "tag_ids": [],
                 "sort_by": "display_date_start", "sort_order": "desc"}
         try:
-            resp = session_post(f"{config['apiUrl']}/promotion", json=body, headers=headers)
+            # Cloudflare 403s every non-Thai IP on this API, proxy pool included.
+            resp = session_post(f"{config['apiUrl']}/promotion", json=body, headers=headers,
+                                thai_ip=True)
             resp.raise_for_status()
             payload = resp.json()
         except Exception as exc:
@@ -255,20 +257,28 @@ class KbjPromotionScraper(PromotionScraper):
         # Cache of detail-page terms keyed by promo link, populated by
         # scrape_promotions when --details is on.
         self._detail_terms = None
+        # Why the last fetch_data could not get the full API list (None when it
+        # did). The Actor raises this as an alert, since the highlight fallback
+        # still returns a few promos and would otherwise pass silently.
+        self.degraded_reason = None
 
     def fetch_data(self, url: str):
         """Fetch the listing page plus, when reachable, the full API promo list.
 
         Returns {"html", "api_items"}; api_items is None when the API gave
         nothing usable, so iter_raw_items falls back to the page itself. Every
-        fallback, and a partial list, is reported on stderr with its reason.
+        fallback, and a partial list, is reported on stderr with its reason
+        and recorded in degraded_reason.
         """
         html = _fetch_html(url)
         api_items, problem = fetch_api_promos(html)
+        self.degraded_reason = None
         if problem and not api_items:
+            self.degraded_reason = f"promotion API {problem}; fell back to highlight promos only"
             print(f"[kbj] promotion API {problem}; falling back to highlight promos only",
                   file=sys.stderr)
         elif problem:
+            self.degraded_reason = f"promotion API {problem}"
             print(f"[kbj] promotion API {problem}", file=sys.stderr)
         return {"html": html, "api_items": api_items or None}
 

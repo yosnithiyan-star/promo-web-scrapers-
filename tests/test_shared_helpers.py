@@ -366,3 +366,43 @@ class TestCommonRetry:
         with pytest.raises(requests.exceptions.ConnectionError):
             common.session_get("http://x")
         assert len(calls) == common._MAX_RETRIES + 1
+
+    def test_post_thai_ip_uses_thai_residential_session(self, monkeypatch):
+        import shared.common as common
+        used = []
+        monkeypatch.setattr(common._SESSION, "post", lambda *a, **k: used.append("default") or _FakeResp())
+        monkeypatch.setattr(common._TH_SESSION, "post", lambda *a, **k: used.append("thai") or _FakeResp())
+        common.session_post("http://x", json={}, thai_ip=True)
+        common.session_post("http://x", json={})
+        assert used == ["thai", "default"]
+        if common.TH_RESIDENTIAL_PROXIES:
+            assert "groups-RESIDENTIAL,country-TH" in common._TH_SESSION.proxies["https"]
+
+    def test_get_thai_ip_uses_thai_residential_session(self, monkeypatch):
+        import shared.common as common
+        used = []
+        monkeypatch.setattr(common._SESSION, "get", lambda *a, **k: used.append("default") or _FakeResp())
+        monkeypatch.setattr(common._TH_SESSION, "get", lambda *a, **k: used.append("thai") or _FakeResp())
+        common.session_get("http://x", thai_ip=True)
+        common.session_get("http://x")
+        assert used == ["thai", "default"]
+
+    def test_fetch_html_forwards_thai_ip(self, monkeypatch):
+        import shared.common as common
+        seen = {}
+
+        class Resp:
+            text = "<html></html>"
+            apparent_encoding = "utf-8"
+            encoding = None
+
+            def raise_for_status(self):
+                pass
+
+        def fake_get(url, timeout=20, thai_ip=False):
+            seen["thai_ip"] = thai_ip
+            return Resp()
+
+        monkeypatch.setattr(common, "session_get", fake_get)
+        assert common.fetch_html("http://x", thai_ip=True) == "<html></html>"
+        assert seen["thai_ip"] is True

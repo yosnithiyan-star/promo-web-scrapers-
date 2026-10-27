@@ -198,3 +198,39 @@ class TestGregorianParser:
         assert parse_gregorian_date_range("01/08/2026 - 30/09/2026") == (
             "2026-08-01", "2026-09-30",
         )
+
+
+class TestThaiIp:
+    """The site 403s every non-Thai IP, so every request must use the Thai route."""
+
+    def test_listing_fetch_uses_thai_ip(self, monkeypatch):
+        import umayplus.umayplus_promo_scraper as mod
+        seen = {}
+
+        def fake_fetch(url, timeout=20, thai_ip=False):
+            seen["thai_ip"] = thai_ip
+            return "<html></html>"
+
+        monkeypatch.setattr(mod, "_fetch_html", fake_fetch)
+        mod.fetch_html("https://www.umayplus.com/promotion")
+        assert seen["thai_ip"] is True
+
+    def test_detail_fetch_uses_thai_ip(self, monkeypatch):
+        import umayplus.umayplus_promo_scraper as mod
+        seen = {}
+
+        class Resp:
+            text = '<div class="content">x</div>'
+            apparent_encoding = "utf-8"
+            encoding = None
+
+            def raise_for_status(self):
+                pass
+
+        def fake_get(url, timeout=20, thai_ip=False):
+            seen["thai_ip"] = thai_ip
+            return Resp()
+
+        monkeypatch.setattr(mod, "session_get", fake_get)
+        mod.fetch_terms("https://www.umayplus.com/promotion/promotiondetail?cashcard=x")
+        assert seen["thai_ip"] is True

@@ -263,15 +263,16 @@ class TestFetchApiPromos:
     def test_posts_with_page_credentials(self, monkeypatch):
         calls = []
 
-        def fake_post(url, json=None, headers=None, timeout=20):
-            calls.append((url, json, headers))
+        def fake_post(url, json=None, headers=None, timeout=20, thai_ip=False):
+            calls.append((url, json, headers, thai_ip))
             return FakeApiResp({"data": {"items": API_ITEMS, "total": 2}})
 
         monkeypatch.setattr("kbj.kbj_promo_scraper.session_post", fake_post)
         items, problem = fetch_api_promos(API_FLIGHT_HTML)
         assert problem is None
         assert len(items) == 2
-        url, body, headers = calls[0]
+        url, body, headers, thai_ip = calls[0]
+        assert thai_ip is True  # Cloudflare blocks non-Thai IPs
         assert url == "https://api.example.test/web-api/promotion"
         assert body["page"] == 1
         assert headers["authorization"] == "Bearer fake-bearer"
@@ -281,7 +282,7 @@ class TestFetchApiPromos:
         pages = {1: [API_ITEMS[0]], 2: [API_ITEMS[1]]}
         monkeypatch.setattr(
             "kbj.kbj_promo_scraper.session_post",
-            lambda url, json=None, headers=None, timeout=20:
+            lambda url, json=None, headers=None, timeout=20, thai_ip=False:
                 FakeApiResp({"data": {"items": pages.get(json["page"], []), "total": 2}}),
         )
         items, problem = fetch_api_promos(API_FLIGHT_HTML)
@@ -291,7 +292,7 @@ class TestFetchApiPromos:
     def test_none_on_http_error(self, monkeypatch):
         monkeypatch.setattr(
             "kbj.kbj_promo_scraper.session_post",
-            lambda url, json=None, headers=None, timeout=20: FakeApiResp({}, status=401),
+            lambda url, json=None, headers=None, timeout=20, thai_ip=False: FakeApiResp({}, status=401),
         )
         items, problem = fetch_api_promos(API_FLIGHT_HTML)
         assert items == []
@@ -350,12 +351,28 @@ class TestApiPath:
         monkeypatch.setattr("kbj.kbj_promo_scraper._fetch_html", lambda url: API_FLIGHT_HTML)
         monkeypatch.setattr("kbj.kbj_promo_scraper.fetch_api_promos", lambda html: (API_ITEMS, None))
         assert scraper.fetch_data(BASE_URL) == {"html": API_FLIGHT_HTML, "api_items": API_ITEMS}
+        assert scraper.degraded_reason is None
+
+    def test_fetch_data_records_degraded_reason_on_fallback(self, scraper, monkeypatch):
+        monkeypatch.setattr("kbj.kbj_promo_scraper._fetch_html", lambda url: API_FLIGHT_HTML)
+        monkeypatch.setattr("kbj.kbj_promo_scraper.fetch_api_promos",
+                            lambda html: ([], "request failed (HTTPError)"))
+        scraper.fetch_data(BASE_URL)
+        assert scraper.degraded_reason == (
+            "promotion API request failed (HTTPError); fell back to highlight promos only")
+
+    def test_fetch_data_records_degraded_reason_on_partial_list(self, scraper, monkeypatch):
+        monkeypatch.setattr("kbj.kbj_promo_scraper._fetch_html", lambda url: API_FLIGHT_HTML)
+        monkeypatch.setattr("kbj.kbj_promo_scraper.fetch_api_promos",
+                            lambda html: (API_ITEMS, "hit the 20-page cap; list may be incomplete"))
+        scraper.fetch_data(BASE_URL)
+        assert scraper.degraded_reason == "promotion API hit the 20-page cap; list may be incomplete"
 
 
 
 def fake_post_returning(payload_for_page):
     """A session_post fake whose JSON payload is chosen per requested page."""
-    def fake_post(url, json=None, headers=None, timeout=20):
+    def fake_post(url, json=None, headers=None, timeout=20, thai_ip=False):
         return FakeApiResp(payload_for_page(json["page"]))
     return fake_post
 
@@ -400,7 +417,7 @@ class TestApiFallbackWarnings:
         assert capsys.readouterr().err == ""
 
     def test_http_error_warns_with_exception_type_only(self, scraper, monkeypatch, capsys):
-        def boom(url, json=None, headers=None, timeout=20):
+        def boom(url, json=None, headers=None, timeout=20, thai_ip=False):
             raise RuntimeError(f"401 for {url} with {headers}")
         promos = self.scrape(scraper, monkeypatch, boom)
         err = capsys.readouterr().err

@@ -74,8 +74,10 @@ DATE_SELECTORS = ["div.promotion-date", "div.promotion-row-date"]
 TYPE_SELECTORS = ["div.promotion-type", "div.promotion-row-type"]
 
 
+# Since 2026-10-24 the site 403s every non-Thai IP (Apify's datacenter pool and
+# US/SG residential included), so all its requests go through a Thai IP.
 def fetch_html(url: str) -> str:
-    return _fetch_html(url, timeout=30)
+    return _fetch_html(url, timeout=30, thai_ip=True)
 
 
 def _first(el, selectors):
@@ -101,7 +103,7 @@ def fetch_terms(link: str) -> str | None:
     if not link:
         return None
     try:
-        resp = session_get(link, timeout=20)
+        resp = session_get(link, timeout=20, thai_ip=True)
         resp.raise_for_status()
     except Exception:
         return None
